@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Libre Caslon Text", "Amiri", serif;
+  --font-body: "Plus Jakarta Sans", "IBM Plex Sans Arabic", sans-serif;
+
+  /* Brand Colors */
+  --color-primary: #3d0006; /* Nabeeti (Deep Maroon) */
+  --color-secondary: #775a19; /* Dahabi (Elegant Gold) */
+  --color-tertiary: #191a19; /* Ink Black */
+
+  /* Material/Gallery Surface Colors */
+  --color-surface: #fcf9f8;
+  --color-surface-dim: #dcd9d9;
+  --color-surface-bright: #fcf9f8;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f6f3f2;
+  --color-surface-container: #f0eded;
+  --color-surface-container-high: #eae7e7;
+  --color-surface-container-highest: #e5e2e1;
+  --color-on-surface: #1c1b1b;
+  --color-on-surface-variant: #554241;
+  --color-inverse-surface: #313030;
+  --color-inverse-on-surface: #f3f0ef;
+  --color-outline: #887271;
+  --color-outline-variant: #dbc0bf;
+  --color-surface-tint: #9d4042;
+  
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Legacy brand support (mapping to new ones) */
+  --color-brand-50: var(--color-surface-container-low);
+  --color-brand-100: #fed488;
+  --color-brand-500: #775a19;
+  --color-brand-600: #3d0006;
+  --color-brand-700: #260004;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--font-body);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Font styling utilities */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+
+  /* Premium animations and micro-interactions */
+  .transition-premium {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Glassmorphism utility */
+  .glass-card {
+    background: rgba(252, 249, 248, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(136, 114, 113, 0.15);
+  }
+
+  .glass-card-dark {
+    background: rgba(25, 26, 25, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-container-low);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-dim);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+  }
+}

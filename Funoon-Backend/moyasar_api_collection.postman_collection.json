@@ -1,0 +1,2218 @@
+{
+  "info": {
+    "name": "Moyasar APIs",
+    "description": "# Overview:\n\nUse this document as a quick reference for folders and endpoints.\n\n---\n\n### Setup\n\n#### 1\\. Get Your API Keys\n\nMoyasar provides unique API keys to authenticate API requests. Each account has two pairs of keys — one for **testing** and one for **live** transactions.\n\n| Key type | Prefix | Use |\n| --- | --- | --- |\n| **Publishable key** | `pk_test_` / `pk_live_` | Creating payments; safe for public use (e.g. HTML forms). |\n| **Secret key** | `sk_test_` / `sk_live_` | All other API operations. Keep secure; never expose publicly. |\n\n- **Test keys:** Use for integration testing without real money.\n    \n- **Live keys:** Use for real payments (available after account activation).\n    \n- If you lose a secret key, you must **regenerate** it in the dashboard; you cannot view it again.\n    \n\n**→** [<b>Get Your API Keys</b>](https://docs.moyasar.com/guides/dashboard/get-your-api-keys) (Moyasar Dashboard)\n\n---\n\n#### 2\\. Add Your Values (Use an Environment)\n\nSet the following values so the collection can call the API and use callbacks correctly:\n\n| Variable | What to set |\n| --- | --- |\n| `merchant_base_url` | Base URL of your app (e.g., `https://yourdomain.com`) for callbacks, webhooks, and success/back URLs. |\n| `apple_domain_name` | Domain registered with Apple Pay for your merchant (only if you use Apple Pay). |\n| `publishable_api_key` | Your publishable key (`pk_test_xx` or `pk_live_xx`). |\n| `secret_key` | Your secret key (`sk_test_xx` or `sk_live_xx`). |\n\n**Best practice:** Do **not** edit the collection variables. Create a **new Environment** in Postman and define these variables there. That way:\n\n- You can switch between test and live by selecting different environments.\n    \n- Your keys and URLs stay out of the shared collection and are easier to keep secure.\n    \n- Teammates can use their own environment with their own keys.\n    \n\n**In Postman:** Environments → Create Environment → add the variables above → save, then select the environment in the top-right before sending requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment",
+          "item": [
+            {
+              "name": "Credit Card",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Save token if response is successful and contains token', function () {",
+                      "    // Check for 2xx status",
+                      "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                      "        let jsonData;",
+                      "",
+                      "        try {",
+                      "            jsonData = pm.response.json();",
+                      "        } catch (e) {",
+                      "            // Not JSON – nothing to save",
+                      "            return;",
+                      "        }",
+                      "",
+                      "        if (jsonData && jsonData.source && jsonData.source.token) {",
+                      "            pm.environment.set('token_id', jsonData.source.token);",
+                      "            console.log('token_id set to:', jsonData.source.token);",
+                      "        }",
+                      "    }",
+                      "});"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 20000,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"creditcard\",\n        \"name\": \"John Doe\",\n        \"number\": \"4111111111111111\",\n        \"month\": 12,\n        \"year\": 2026,\n        \"cvc\": \"911\",\n        \"statement_descriptor\": \"MY STORE\",\n        \"3ds\": true,\n        \"manual\": false,\n        \"save_card\": true\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `creditcard`. Required: name (2+ words), number (16-19 digits), month (1-12), year (≥2000), cvc. Optional: statement_descriptor, 3ds (default true), manual (auth-only), save_card. callback_url required for creditcard."
+              },
+              "response": []
+            },
+            {
+              "name": "Token (saved card)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 10000,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"token\",\n        \"token\": \"{{token_id}}\",\n        \"cvc\": \"911\",\n        \"statement_descriptor\": \"MY STORE\",\n        \"manual\": false,\n        \"3ds\": true\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `token`. Use a previously saved card token (prefix `token_`). Optional: cvc, statement_descriptor, 3ds, manual. callback_url required for token."
+              },
+              "response": []
+            },
+            {
+              "name": "Apple Pay (token)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 10000,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"applepay\",\n        \"token\": \"<encrypted_apple_pay_payment_token_from_device_session>\",\n        \"statement_descriptor\": \"MY STORE\",\n        \"manual\": false,\n        \"save_card\": false\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `applepay` with encrypted token from Apple Pay JS/session. Optional: manual, save_card, statement_descriptor. Replace token with payload from PaymentRequest or Apple Pay session."
+              },
+              "response": []
+            },
+            {
+              "name": "Apple Pay (decrypted)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 565600,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"applepay\",\n        \"number\": \"5123450000000008\", // The Device Primary Account Number (DPAN).\n        \"month\": 1,\n        \"year\": 2039,\n        \"cryptogram\": \"<base64_encrypted_cryptogram_from_apple>\", // The network token cryptogram generated by the device wallet.\n        \"device_id\": \"<apple_device_id>\", // (8-16 characters) A unique identifier assigned to the device or wallet.\n        \"last_four\": \"0008\",\n        \"eci\": \"05\" // The Electronic Commerce Indicator (ECI).\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `applepay` with decrypted DPAN data. Fields: number (DPAN 16-19 digits), month, year, cryptogram (≤64 chars), device_id (8-16 chars), last_four, eci (2 digits). Optional: manual, save_card, statement_descriptor."
+              },
+              "response": []
+            },
+            {
+              "name": "Samsung Pay",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 10000,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"samsungpay\",\n        \"token\": \"<encrypted_samsung_pay_payment_token_from_device>\", // Received from the Samsung Pay SDK on the device\n        \"statement_descriptor\": \"MY STORE\",\n        \"manual\": false,\n        \"save_card\": false\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `samsungpay` with encrypted token from Samsung Pay. Optional: manual, save_card, statement_descriptor. Replace token with payload from Samsung Pay SDK."
+              },
+              "response": []
+            },
+            {
+              "name": "STC Pay",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"amount\": 10000,\n    \"currency\": \"SAR\",\n    // \"given_id\": \"0688ff78-7656-4de3-a7cf-b13fa552224a\",\n    \"description\": \"Order payment\",\n    \"callback_url\": \"{{merchant_base_url}}/callback\",\n    \"metadata\": {\n        \"order_id\": \"order_123\",\n        \"customer_id\": \"cust_456\"\n    },\n    \"apply_coupon\": false,\n    \"source\": {\n        \"type\": \"stcpay\",\n        \"mobile\": \"0512345678\",\n        \"cashier\": \"cashier_001\",\n        \"branch\": \"branch_001\"\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "headerFamily": "json",
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payments",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payments"
+                  ]
+                },
+                "description": "Source type: `stcpay`. Required: mobile (Saudi format: 05xxxxxxxx, +9665xxxxxxxx, or 009665xxxxxxxx). Optional: cashier, branch. Response includes transaction_url for OTP challenge; POST otp_value to that URL to complete."
+              },
+              "response": []
+            }
+          ],
+          "description": "## Create Payment:\n\nSupports multiple payment sources: credit card, saved token, Apple Pay, Samsung Pay, and STC Pay.\n\nPath: `/payments`\n\nMethod: `POST`\n\n| Request | Description |\n| --- | --- |\n| Credit Card | Pay with card details; optional 3DS, save_card, manual auth |\n| Token (saved card) | Pay with saved card token (`token_xx`) |\n| Apple Pay (token) | Pay with encrypted Apple Pay token from device |\n| Apple Pay (decrypted) | Pay with decrypted DPAN (number, cryptogram, device_id, etc.) |\n| Samsung Pay | Pay with encrypted Samsung Pay token from SDK |\n| STC Pay | Pay with STC Pay;  <br>requires `mobile` (Saudi format);  <br>uses OTP flow |\n\n---",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {},
+                "exec": [
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {},
+                "exec": [
+                  "pm.test('Save payment_id if response is successful and contains id', function () {",
+                  "    // Check for 2xx status",
+                  "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "        let jsonData;",
+                  "",
+                  "        try {",
+                  "            jsonData = pm.response.json();",
+                  "        } catch (e) {",
+                  "            // Not JSON – nothing to save",
+                  "            return;",
+                  "        }",
+                  "",
+                  "        if (jsonData && jsonData.id) {",
+                  "            pm.environment.set('payment_id', jsonData.id);",
+                  "            console.log('payment_id set to:', jsonData.id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "id",
+                  "value": "{{payment_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "initiated",
+                  "description": "initiated, paid, authorized, failed, refunded, captured, voided, verified",
+                  "disabled": true
+                },
+                {
+                  "key": "created[gt]",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "created[lt]",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "updated[gt]",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "updated[lt]",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "metadata[key]",
+                  "value": "",
+                  "description": "Filter invoices by a given metadata `key`. You need to change in the key in the square brackets.",
+                  "disabled": true
+                },
+                {
+                  "key": "card_last_digits",
+                  "value": "7353",
+                  "description": "Filter payments by card last digits. Only available for scheme payments: `creditcard`, `applepay`, `samsungpay`.",
+                  "disabled": true
+                },
+                {
+                  "key": "receipt_no",
+                  "value": "812624934651",
+                  "description": "Filter payments by RRN or retreival reference number.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List payments with optional filters: page, id, status, created[gt], created[lt], updated[gt], updated[lt], metadata[key], card_last_digits (4 digits), receipt_no (12-digit RRN).\n\n**Docs:** https://docs.moyasar.com/api/payments/03-list-payments"
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Payment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments/:payment_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments",
+                ":payment_id"
+              ],
+              "variable": [
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            },
+            "description": "Fetch a single payment by ID (path parameter :id).\n\n**Docs:** https://docs.moyasar.com/api/payments/02-fetch-payment"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated payment description\",\n  \"metadata\": {\n    \"order_id\": \"order_123\",\n    \"customer_id\": \"cust_456\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments/:payment_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments",
+                ":payment_id"
+              ],
+              "variable": [
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            },
+            "description": "Update a payment's description and/or metadata (PUT /payments/:id). Body: description (string), metadata (object of string key-value pairs).\n\n**Docs:** https://docs.moyasar.com/api/payments/04-update-payment"
+          },
+          "response": []
+        },
+        {
+          "name": "Refund Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments/:payment_id/refund",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments",
+                ":payment_id",
+                "refund"
+              ],
+              "variable": [
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            },
+            "description": "Refund a captured payment (POST /payments/:id/refund). Body: amount (integer, optional — full refund if omitted).\n\n**Docs:** https://docs.moyasar.com/api/payments/05-refund-payment"
+          },
+          "response": []
+        },
+        {
+          "name": "Capture Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2000\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments/:payment_id/capture",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments",
+                ":payment_id",
+                "capture"
+              ],
+              "variable": [
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            },
+            "description": "Capture an authorized payment (POST /payments/:id/capture). Body: amount (integer, optional — full capture if omitted). Use for payments created with manual: true.\n\n**Docs:** https://docs.moyasar.com/api/payments/06-capture-payment"
+          },
+          "response": []
+        },
+        {
+          "name": "Void Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/payments/:payment_id/void",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "payments",
+                ":payment_id",
+                "void"
+              ],
+              "variable": [
+                {
+                  "key": "payment_id",
+                  "value": "{{payment_id}}"
+                }
+              ]
+            },
+            "description": "Void an authorized (uncaptured) payment (POST /payments/:id/void). No body. Use for payments created with manual: true that you do not want to capture.\n\n**Docs:** https://docs.moyasar.com/api/payments/07-void-payment"
+          },
+          "response": []
+        }
+      ],
+      "description": "## Payments\n\n**Overview:** Create, list, fetch, update, refund, capture, and void payments. Supports multiple payment sources: credit card, saved token, Apple Pay, Samsung Pay, and STC Pay.\n\n| Request | Method | Path | Description |\n| --- | --- | --- | --- |\n| **Create Payment** (subfolder) | — | — | Multiple source types under one folder |\n| List Payments | GET | `/payments` | List with filters: page, id, status, created, updated, metadata, card_last_digits, receipt_no |\n| Fetch Payment | GET | `/payments/:payment_id` | Get single payment by ID |\n| Update Payment | PUT | `/payments/:payment_id` | Update description and/or metadata |\n| Refund Payment | POST | `/payments/:payment_id/refund` | Refund (full or partial amount) |\n| Capture Payment | POST | `/payments/:payment_id/capture` | Capture authorized payment (e.g. manual auth) |\n| Void Payment | POST | `/payments/:payment_id/void` | Void authorized, uncaptured payment |\n\n**Notes:**\n\n- Status filters: `initiated`, `paid`, `authorized`, `failed`, `refunded`, `captured`, `voided`, `verified`.\n    \n\n---"
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Create Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Save invoice if response is successful and contains id', function () {",
+                  "    // Check for 2xx status",
+                  "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "        let jsonData;",
+                  "",
+                  "        try {",
+                  "            jsonData = pm.response.json();",
+                  "        } catch (e) {",
+                  "            // Not JSON – nothing to save",
+                  "            return;",
+                  "        }",
+                  "",
+                  "        if (jsonData && jsonData.id) {",
+                  "            pm.environment.set('invoice_id', jsonData.id);",
+                  "            console.log('invoice_id set to:', jsonData.id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 10000,\n    \"currency\": \"SAR\",\n    \"description\": \"Invoice for services rendered\",\n    \"callback_url\": \"{{merchant_base_url}}/webhooks/invoice-paid\",\n    \"success_url\": \"{{merchant_base_url}}/success\",\n    \"back_url\": \"{{merchant_base_url}}/back\",\n    \"expired_at\": \"2026-03-01T23:59:59.000Z\",\n    \"metadata\": {\n        \"order_id\": \"ORD-001\",\n        \"customer_id\": \"cust_123\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            },
+            "description": "Create a new invoice.\n\n**Required:** `amount` (integer, min 100, in smallest currency unit), `currency` (ISO-4217), `description`.\n\n**Optional:** `callback_url`, `success_url`, `back_url`, `expired_at` (ISO 8601), `metadata` (key-value object).\n\nReturns 201 with the invoice object including `id`, `url` (checkout page), `status`, etc."
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Create Invoices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"invoices\": [\n        {\n            \"amount\": 5000,\n            \"currency\": \"SAR\",\n            \"description\": \"Bulk invoice 1\"\n        },\n        {\n            \"amount\": 7500,\n            \"currency\": \"SAR\",\n            \"description\": \"Bulk invoice 2\",\n            \"callback_url\": \"{{merchant_base_url}}/webhooks/invoice-paid\",\n            \"success_url\": \"{{merchant_base_url}}/success\",\n            \"back_url\": \"{{merchant_base_url}}/back\",\n            \"expired_at\": \"2026-03-01T23:59:59.000Z\",\n            \"metadata\": {\n                \"batch\": \"BATCH-001\"\n            }\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices/bulk",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "bulk"
+              ]
+            },
+            "description": "Create up to 50 invoices in a single request.\n\n**Body:** `invoices` array; each item has required `amount`, `currency`, `description` and optional `callback_url`, `success_url`, `back_url`, `expired_at`, `metadata`.\n\nReturns 201 with an array of created invoice objects."
+          },
+          "response": []
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)",
+                  "disabled": true
+                },
+                {
+                  "key": "id",
+                  "value": "{{invoice_id}}",
+                  "description": "Filter by invoice ID (UUID)",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "initiated",
+                  "description": "Filter by status: initiated, paid, failed, refunded, canceled, on_hold, expired, voided",
+                  "disabled": true
+                },
+                {
+                  "key": "created[gt]",
+                  "value": "",
+                  "description": "Invoices created on or after (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "created[lt]",
+                  "value": "",
+                  "description": "Invoices created on or before (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "metadata[key]",
+                  "value": "",
+                  "description": "Filter by metadata key; replace 'key' with your key name",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve a paginated list of invoices. Query params: `page`, `id`, `status`, `created[gt]`, `created[lt]`, `metadata[key]`. Response includes `invoices` array and `meta` (current_page, next_page, prev_page, total_pages, total_count)."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Invoice",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices/:invoice_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices",
+                ":invoice_id"
+              ],
+              "variable": [
+                {
+                  "key": "invoice_id",
+                  "value": "{{invoice_id}}"
+                }
+              ]
+            },
+            "description": "Retrieve a single invoice by ID. Returns 200 with full invoice object including payments array, or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"order_id\": \"ORD-001-UPDATED\",\n    \"customer_id\": \"cust_123\",\n    \"notes\": \"Updated via API\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices/:invoice_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices",
+                ":invoice_id"
+              ],
+              "variable": [
+                {
+                  "key": "invoice_id",
+                  "value": "{{invoice_id}}"
+                }
+              ]
+            },
+            "description": "Update an existing invoice. Only `metadata` (key-value object) can be updated. Returns 200 with the updated invoice, or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/invoices/:invoice_id/cancel",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "invoices",
+                ":invoice_id",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "invoice_id",
+                  "value": "{{invoice_id}}"
+                }
+              ]
+            },
+            "description": "Cancel an invoice by ID. Returns 200 with the invoice object (status will be `canceled`), or 404 if not found."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payouts",
+      "item": [
+        {
+          "name": "Payout Accounts",
+          "item": [
+            {
+              "name": "Create Payout Account",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Save payout_account_id if response is successful and contains id', function () {",
+                      "    // Check for 2xx status",
+                      "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                      "        let jsonData;",
+                      "",
+                      "        try {",
+                      "            jsonData = pm.response.json();",
+                      "        } catch (e) {",
+                      "            // Not JSON – nothing to save",
+                      "            return;",
+                      "        }",
+                      "",
+                      "        if (jsonData && jsonData.id) {",
+                      "            pm.environment.set('payout_account_id', jsonData.id);",
+                      "            console.log('payout_account_id set to:', jsonData.id);",
+                      "        }",
+                      "    }",
+                      "});"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"account_type\": \"bank\", // bank, wallet\n    \"properties\": {\n        \"iban\": \"SA03xxxxxxxxxxxxx\"\n    },\n    \"credentials\": {\n        // Contains the secret information relevant to the payout account. \n        // For example, the private key configured for this account. \n        // Every service provider can provide a different set of credentials.\n    }\n}"
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payout_accounts"
+                  ]
+                },
+                "description": "Create a payout account (bank or wallet).\n\n**Required:** `account_type` (bank | wallet), `properties` (e.g. IBAN), `credentials` (secret data). Returns 201 with account id, currency, created_at."
+              },
+              "response": [
+                {
+                  "name": "ANB Example",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"account_type\": \"bank\",\n    \"properties\": {\n        \"iban\": \"SA4730400108055591690018\"\n    },\n    \"credentials\": {\n        \"client_id\": \"any_client_id\",\n        \"client_secret\": \"any_client_secret\"\n    }\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                      "host": [
+                        "{{moyasar_api_base_url}}"
+                      ],
+                      "path": [
+                        "payout_accounts"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "Text",
+                  "header": [],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "RAJHI Example",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"account_type\": \"bank\",\n    \"properties\": {\n        \"iban\": \"SA9680000204608015210218\"\n    },\n    \"credentials\": {\n        \"company_code\": \"125105413\",\n        \"cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n        \"key\": \"-----BEGIN RSA PRIVATE KEY-----\\n...\\n-----END RSA PRIVATE KEY-----\"\n    }\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                      "host": [
+                        "{{moyasar_api_base_url}}"
+                      ],
+                      "path": [
+                        "payout_accounts"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "Text",
+                  "header": [],
+                  "cookie": [],
+                  "body": ""
+                },
+                {
+                  "name": "SNB Example",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"account_type\": \"bank\",\n    \"properties\": {\n        \"iban\": \"SA9680000204608015210218\",\n        \"corporate_id\": \"\"\n    },\n    \"credentials\": {\n        \"client_id\": \"125105413\",\n        \"client_secret\": \"\",\n        \"key\": \"\"\n    }\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                      "host": [
+                        "{{moyasar_api_base_url}}"
+                      ],
+                      "path": [
+                        "payout_accounts"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "",
+                  "header": [],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "Wallet Example",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"account_type\": \"wallet\",\n    \"properties\": {\n        \"merchant_id\": \"\"\n    },\n    \"credentials\": {\n        \"cert\": \"\",\n        \"key\": \"\"\n    }\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                      "host": [
+                        "{{moyasar_api_base_url}}"
+                      ],
+                      "path": [
+                        "payout_accounts"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": null,
+                  "header": null,
+                  "cookie": [],
+                  "body": null
+                }
+              ]
+            },
+            {
+              "name": "List Payout Accounts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payout_accounts",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payout_accounts"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (default: 1)",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List payout accounts with pagination. Returns array of accounts and meta."
+              },
+              "response": []
+            },
+            {
+              "name": "Fetch Payout Account",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payout_accounts/:payout_account_id",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payout_accounts",
+                    ":payout_account_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "payout_account_id",
+                      "value": "{{payout_account_id}}"
+                    }
+                  ]
+                },
+                "description": "Fetch a single payout account by ID. Returns 200 with account details or 404."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payouts",
+          "item": [
+            {
+              "name": "Create Bank Payout",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Save payout_id if response is successful and contains id', function () {",
+                      "    // Check for 2xx status",
+                      "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                      "        let jsonData;",
+                      "",
+                      "        try {",
+                      "            jsonData = pm.response.json();",
+                      "        } catch (e) {",
+                      "            // Not JSON – nothing to save",
+                      "            return;",
+                      "        }",
+                      "",
+                      "        if (jsonData && jsonData.id) {",
+                      "            pm.environment.set('payout_id', jsonData.id);",
+                      "            console.log('payout_id set to:', jsonData.id);",
+                      "        }",
+                      "    }",
+                      "});"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"source_id\": \"{{payout_account_id}}\",\n    \"sequence_number\": \"6244377266243449\",\n    \"amount\": 10000,\n    \"purpose\": \"payroll_benefits\", // bills_or_rent, expenses_services, purchase_assets, saving_investment, government_dues, money_exchange, credit_card_loan, gift_or_reward, personal, investment_transaction, family_assistance, donation, payroll_benefits, online_purchase, hajj_and_umra, dividend_payment, government_payment, investment_house, payment_to_merchant, own_account_transfer\n    \"comment\": \"Payroll payout\",\n    \"metadata\": {\n        \"batch_id\": \"BATCH-001\"\n    },\n    \"destination\": {\n        \"type\": \"bank\",\n        \"iban\": \"SA0380000000608010167519\",\n        \"name\": \"Beneficiary Name\",\n        \"mobile\": \"0512345678\",\n        \"country\": \"SA\",\n        \"city\": \"Riyadh\"\n    }\n}"
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts"
+                  ]
+                },
+                "description": "Create a single payout.\n\n**Required:** `source_id` (payout account id), `amount` (smallest unit), `purpose`, `destination` (bank: type, iban, name, mobile, country, city | wallet: type, mobile).\n\n**Optional:** sequence_number (16 digits), comment, metadata. Returns 201 with payout object."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Wallet Payout",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Save payout_id if response is successful and contains id', function () {",
+                      "    // Check for 2xx status",
+                      "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                      "        let jsonData;",
+                      "",
+                      "        try {",
+                      "            jsonData = pm.response.json();",
+                      "        } catch (e) {",
+                      "            // Not JSON – nothing to save",
+                      "            return;",
+                      "        }",
+                      "",
+                      "        if (jsonData && jsonData.id) {",
+                      "            pm.environment.set('payout_id', jsonData.id);",
+                      "            console.log('payout_id set to:', jsonData.id);",
+                      "        }",
+                      "    }",
+                      "});"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"source_id\": \"{{payout_account_id}}\",\n    \"sequence_number\": \"6244377266243449\",\n    \"amount\": 10000,\n    \"purpose\": \"payroll_benefits\", // bills_or_rent, expenses_services, purchase_assets, saving_investment, government_dues, money_exchange, credit_card_loan, gift_or_reward, personal, investment_transaction, family_assistance, donation, payroll_benefits, online_purchase, hajj_and_umra, dividend_payment, government_payment, investment_house, payment_to_merchant, own_account_transfer\n    \"comment\": \"Payroll payout\",\n    \"metadata\": {\n        \"batch_id\": \"BATCH-001\"\n    },\n    \"destination\": {\n        \"type\": \"wallet\",\n        \"mobile\": \"0512345678\"\n    }\n}"
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts"
+                  ]
+                },
+                "description": "Create a single payout.\n\n**Required:** `source_id` (payout account id), `amount` (smallest unit), `purpose`, `destination` (bank: type, iban, name, mobile, country, city | wallet: type, mobile).\n\n**Optional:** sequence_number (16 digits), comment, metadata. Returns 201 with payout object."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Bulk Bank Payout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source_id\": \"{{payout_account_id}}\",\n  \"payouts\": [\n    {\n      \"amount\": 5000,\n      \"purpose\": \"payroll_benefits\",\n      \"destination\": {\n        \"type\": \"bank\",\n        \"iban\": \"SA0380000000608010167519\",\n        \"name\": \"Beneficiary One\",\n        \"mobile\": \"0512345678\",\n        \"country\": \"SA\",\n        \"city\": \"Riyadh\"\n      },\n      \"comment\": \"Batch item 1\"\n    },\n    {\n      \"amount\": 4000,\n      \"purpose\": \"personal\",\n      \"destination\": {\n        \"type\": \"bank\",\n        \"iban\": \"SA0380000000608010167519\",\n        \"name\": \"Beneficiary One\",\n        \"mobile\": \"0512345678\",\n        \"country\": \"SA\",\n        \"city\": \"Riyadh\"\n      },\n      \"comment\": \"Batch item 1\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts/bulk",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts",
+                    "bulk"
+                  ]
+                },
+                "description": "Create multiple payouts in one request. **Required:** `source_id`, `payouts` array (each: amount, purpose, destination). **Optional per item:** sequence_number, comment, metadata. Returns 201 with array of payout objects."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Bulk Wallet Payout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source_id\": \"{{payout_account_id}}\",\n  \"payouts\": [\n    {\n      \"amount\": 7500,\n      \"purpose\": \"personal\",\n      \"destination\": {\n        \"type\": \"wallet\",\n        \"mobile\": \"0598765432\"\n      }\n    },\n    {\n      \"amount\": 900,\n      \"purpose\": \"personal\",\n      \"destination\": {\n        \"type\": \"wallet\",\n        \"mobile\": \"0598765432\"\n      }\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts/bulk",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts",
+                    "bulk"
+                  ]
+                },
+                "description": "Create multiple payouts in one request. **Required:** `source_id`, `payouts` array (each: amount, purpose, destination). **Optional per item:** sequence_number, comment, metadata. Returns 201 with array of payout objects."
+              },
+              "response": []
+            },
+            {
+              "name": "List Payouts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (default: 1)",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List payouts with pagination. Returns array of payouts and meta."
+              },
+              "response": []
+            },
+            {
+              "name": "Fetch Payout",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{moyasar_api_base_url}}/payouts/:payout_id",
+                  "host": [
+                    "{{moyasar_api_base_url}}"
+                  ],
+                  "path": [
+                    "payouts",
+                    ":payout_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "payout_id",
+                      "value": "{{payout_id}}"
+                    }
+                  ]
+                },
+                "description": "Fetch a single payout by ID. Returns 200 with payout details or 404."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Settlements",
+      "item": [
+        {
+          "name": "List Settlements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/settlements",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "settlements"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)",
+                  "disabled": true
+                },
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Filter by settlement ID (UUID)",
+                  "disabled": true
+                },
+                {
+                  "key": "created[gt]",
+                  "value": "",
+                  "description": "Settlements created on or after (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "created[lt]",
+                  "value": "",
+                  "description": "Settlements created on or before (ISO 8601)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List settlements with optional filters.\n\n**Query:** `page`, `id`, `created[gt]`, `created[lt]`.\n\nReturns `settlements` array (id, recipient_type, recipient_id, currency, amount, fee, tax, reference, settlement_count, invoice_url, csv_list_url, pdf_list_url, created_at) and `meta` (pagination)."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Settlement",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/settlements/:settlement_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "settlements",
+                ":settlement_id"
+              ],
+              "variable": [
+                {
+                  "key": "settlement_id",
+                  "value": "{{settlement_id}}"
+                }
+              ]
+            },
+            "description": "Fetch a single settlement by ID.\n\nReturns 200 with settlement details (id, recipient_type, recipient_id, currency, amount, fee, tax, reference, settlement_count, invoice_url, csv_list_url, pdf_list_url, created_at), or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "List Settlement Lines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/settlements/:settlement_id/lines",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "settlements",
+                ":settlement_id",
+                "lines"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "settlement_id",
+                  "value": "{{settlement_id}}"
+                }
+              ]
+            },
+            "description": "List transaction lines for a settlement.\n\n**Path:** settlement ID. **Query:** `page`.\n\nReturns `lines` array (payment_id, type, currency, payment_amount, amount, fee, tax, reference_number, authorization_code, ip, transacted_at, source, metadata) and `meta`. Line types: payment, refund, void, fee, platform_duties, other_duties, chargeback, chargeback_penalty, installment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sources",
+      "item": [
+        {
+          "name": "Retrieve creditcard Issuer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"source\": {\n        \"type\": \"creditcard\",\n        \"number\": \"4111111111111111\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/source/issuer",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "source",
+                "issuer"
+              ]
+            },
+            "description": "Create a new invoice.\n\n**Required:** `amount` (integer, min 100, in smallest currency unit), `currency` (ISO-4217), `description`.\n\n**Optional:** `callback_url`, `success_url`, `back_url`, `expired_at` (ISO 8601), `metadata` (key-value object).\n\nReturns 201 with the invoice object including `id`, `url` (checkout page), `status`, etc."
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve applepay Issuer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"source\": {\n        \"type\": \"applepay\",\n        \"token\": \"<encrypted_apple_pay_token>\" // Encrypted Apple Pay token to be processed.\n    }\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/source/issuer",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "source",
+                "issuer"
+              ]
+            },
+            "description": "Create a new invoice.\n\n**Required:** `amount` (integer, min 100, in smallest currency unit), `currency` (ISO-4217), `description`.\n\n**Optional:** `callback_url`, `success_url`, `back_url`, `expired_at` (ISO 8601), `metadata` (key-value object).\n\nReturns 201 with the invoice object including `id`, `url` (checkout page), `status`, etc."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tokens",
+      "item": [
+        {
+          "name": "Create Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Save token if response is successful and contains id', function () {",
+                  "    // Check for 2xx status",
+                  "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "        let jsonData;",
+                  "",
+                  "        try {",
+                  "            jsonData = pm.response.json();",
+                  "        } catch (e) {",
+                  "            // Not JSON – nothing to save",
+                  "            return;",
+                  "        }",
+                  "",
+                  "        if (jsonData && jsonData.id) {",
+                  "            pm.environment.set('token_id', jsonData.id);",
+                  "            console.log('token_id set to:', jsonData.id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Mohammed Ali\",\n    \"number\": \"4111111111111111\",\n    \"month\": \"09\",\n    \"year\": \"27\",\n    \"cvc\": \"911\",\n    \"callback_url\": \"{{merchant_base_url}}/thanks\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/tokens",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "tokens"
+              ]
+            },
+            "description": "Generate a token for a Mada or credit card. **Must be called from frontend** with your **publishable key** (pk_test_* / pk_live_*). Use x-www-form-urlencoded body.\n\nRequired: name, number (16-19 digits), month (01-12), year (YY or YYYY), cvc, callback_url.\n\nResponse includes verification_url for 3DS; cardholder must complete verification for token to become `active`.\n\n**Docs:** https://docs.moyasar.com/api/other/tokens/create-token"
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/tokens/:id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "tokens",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{token_id}}",
+                  "description": "Token ID (e.g. token_xxx)"
+                }
+              ]
+            },
+            "description": "Fetch a single token by ID. Uses **secret key** (sk_test_* / sk_live_*). Path param :id is the token ID (e.g. token_x6okRgkZJrhgDHyqJ9zztW2X1k).\n\n**Docs:** https://docs.moyasar.com/api/other/tokens/fetch-token"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/tokens/:id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "tokens",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{token_id}}",
+                  "description": "Token ID to delete"
+                }
+              ]
+            },
+            "description": "Delete a token by ID. Uses **secret key** (sk_test_* / sk_live_*). Path param :id is the token ID.\n\n**Docs:** https://docs.moyasar.com/api/other/tokens/delete-token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Apple Pay",
+      "item": [
+        {
+          "name": "Request Apple Pay Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Save token if response is successful and contains id', function () {",
+                  "    // Check for 2xx status",
+                  "    if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "        let jsonData;",
+                  "",
+                  "        try {",
+                  "            jsonData = pm.response.json();",
+                  "        } catch (e) {",
+                  "            // Not JSON – nothing to save",
+                  "            return;",
+                  "        }",
+                  "",
+                  "        if (jsonData && jsonData.id) {",
+                  "            pm.environment.set('token_id', jsonData.id);",
+                  "            console.log('token_id set to:', jsonData.id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"validation_url\": \"{{apple_validation_url}}\", // https://apple-pay-gateway.apple.com/paymentservices/startSession\n    \"display_name\": \"Postman Test Request\",\n    \"domain_name\": \"{{apple_domain_name}}\", // should be registered in Moyasar Dashboard\n    \"publishable_api_key\": \"{{publishable_api_key}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/applepay/initiate",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "applepay",
+                "initiate"
+              ]
+            },
+            "description": "Generate a token for a Mada or credit card. **Must be called from frontend** with your **publishable key** (pk_test_* / pk_live_*). Use x-www-form-urlencoded body.\n\nRequired: name, number (16-19 digits), month (01-12), year (YY or YYYY), cvc, callback_url.\n\nResponse includes verification_url for 3DS; cardholder must complete verification for token to become `active`.\n\n**Docs:** https://docs.moyasar.com/api/other/tokens/create-token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "List Webhooks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks"
+              ]
+            },
+            "description": "List all registered webhooks.\n\nReturns `webhooks` array with id, http_method, url, created_at, events (payment_paid, payment_failed, payment_voided, payment_authorized, payment_captured, payment_refunded, payment_abandoned, payment_verified)."
+          },
+          "response": []
+        },
+        {
+          "name": "Available Webhooks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks/available_events",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks",
+                "available_events"
+              ]
+            },
+            "description": "List all registered webhooks.\n\nReturns `webhooks` array with id, http_method, url, created_at, events (payment_paid, payment_failed, payment_voided, payment_authorized, payment_captured, payment_refunded, payment_abandoned, payment_verified)."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"http_method\": \"post\",\n    \"url\": \"{{merchant_base_url}}/webhook\",\n    \"shared_secret\": \"your-secret-key\",\n    \"events\": [\n        \"payment_paid\",\n        \"payment_failed\",\n        \"payment_voided\",\n        \"payment_authorized\",\n        \"payment_captured\",\n        \"payment_refunded\",\n        \"payment_abandoned\",\n        \"payment_verified\",\n        \"payment_canceled\",\n        \"payment_expired\",\n        \"balance_transferred\",\n        \"payout_initiated\",\n        \"payout_paid\",\n        \"payout_failed\",\n        \"payout_canceled\",\n        \"payout_returned\"\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Global Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"http_method\": \"post\",\n    \"url\": \"{{merchant_base_url}}/webhook\",\n    \"shared_secret\": \"your-secret-key\"\n}"
+            },
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks"
+              ]
+            },
+            "description": "You can create a global event listener by omitting the event key, this will enable you listen to all of the currently available events and all the events to be added in the future."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Webhook",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks/:webhook_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks",
+                ":webhook_id"
+              ],
+              "variable": [
+                {
+                  "key": "webhook_id",
+                  "value": "{{webhook_id}}"
+                }
+              ]
+            },
+            "description": "Get a webhook by its ID.\n\nReturns 200 with webhook object (id, http_method, url, created_at, events), or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Webhook",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks/:webhook_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks",
+                ":webhook_id"
+              ],
+              "variable": [
+                {
+                  "key": "webhook_id",
+                  "value": "{{webhook_id}}"
+                }
+              ]
+            },
+            "description": "Delete a webhook by its ID.\n\nReturns 200 with success message: `{\"message\": \"Webhook was deleted successfully\"}`, or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "List all Webhook attempts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks/attempts",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks",
+                "attempts"
+              ]
+            },
+            "description": "Fetch a webhook attempt by its ID.\n\nReturns 200 with attempt details (id, webhook_id, event_id, event_type, retry_number, result, message, response_code, response_headers, response_body, created_at), or 404 if not found."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Webhook Attempt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/webhooks/attempts/:webhook_attempt_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "webhooks",
+                "attempts",
+                ":webhook_attempt_id"
+              ],
+              "variable": [
+                {
+                  "key": "webhook_attempt_id",
+                  "value": "{{webhook_attempt_id}}"
+                }
+              ]
+            },
+            "description": "Fetch a webhook attempt by its ID.\n\nReturns 200 with attempt details (id, webhook_id, event_id, event_type, retry_number, result, message, response_code, response_headers, response_body, created_at), or 404 if not found."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Transfers",
+      "item": [
+        {
+          "name": "List Transfers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/transfers",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "transfers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all transfers (settlements) performed for your account.\n\n**Note:** This API is only available for Moyasar aggregation merchants.\n\n**Query:** `page` (returns 40 items per page).\n\nReturns `transfers` array (id, recipient_type, recipient_id, currency, amount, fee, tax, reference, transaction_count, created_at) and `meta` (pagination)."
+          },
+          "response": []
+        },
+        {
+          "name": "Show Transfer",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/transfers/:transfer_id",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "transfers",
+                ":transfer_id"
+              ],
+              "variable": [
+                {
+                  "key": "transfer_id",
+                  "value": "{{transfer_id}}"
+                }
+              ]
+            },
+            "description": "List all transfers (settlements) performed for your account.\n\n**Note:** This API is only available for Moyasar aggregation merchants.\n\n**Query:** `page` (returns 40 items per page).\n\nReturns `transfers` array (id, recipient_type, recipient_id, currency, amount, fee, tax, reference, transaction_count, created_at) and `meta` (pagination)."
+          },
+          "response": []
+        },
+        {
+          "name": "List Transfer Lines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{moyasar_api_base_url}}/transfers/:transfer_id/lines",
+              "host": [
+                "{{moyasar_api_base_url}}"
+              ],
+              "path": [
+                "transfers",
+                ":transfer_id",
+                "lines"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "transfer_id",
+                  "value": "{{transfer_id}}"
+                }
+              ]
+            },
+            "description": "List all transfers (settlements) performed for your account.\n\n**Note:** This API is only available for Moyasar aggregation merchants.\n\n**Query:** `page` (returns 40 items per page).\n\nReturns `transfers` array (id, recipient_type, recipient_id, currency, amount, fee, tax, reference, transaction_count, created_at) and `meta` (pagination)."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{secret_key}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "moyasar_api_base_url",
+      "value": "https://api.moyasar.com/v1",
+      "description": "Base URL for Moyasar API endpoints (e.g., `https://api.moyasar.com/v1`). Used to construct all API request URLs."
+    },
+    {
+      "key": "merchant_base_url",
+      "value": "https://example.com",
+      "description": "Base URL of your merchant application. Used in callback URLs, webhook URLs, and redirect URLs (success_url, back_url) so Moyasar can send callbacks and redirects to your application."
+    },
+    {
+      "key": "apple_domain_name",
+      "value": "https://example.com",
+      "description": "Domain name registered with Apple Pay for your merchant account. Required when initiating Apple Pay sessions."
+    },
+    {
+      "key": "apple_validation_url",
+      "value": "https://apple-pay-gateway.apple.com/paymentservices/startSession",
+      "description": "Validation URL provided by Apple Pay session. Used when initiating Apple Pay sessions via the Moyasar API."
+    },
+    {
+      "key": "publishable_api_key",
+      "value": "pk_test_xxx",
+      "description": "Your publishable API key (`pk_test_*` or `pk_live_*`). Used for frontend/public operations like creating tokens. Safe to expose in client-side code."
+    },
+    {
+      "key": "secret_key",
+      "value": "sk_test_xxx",
+      "description": "Your secret API key (`sk_test_*` or `sk_live_*`). Used for server-side operations and authentication via HTTP Basic Auth. Keep secure and never expose publicly."
+    }
+  ]
+}

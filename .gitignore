@@ -1,0 +1,18 @@
+   # Dependencies
+   node_modules/
+   
+   # Environment variables (ممنوع رفعه نهائياً)
+   .env
+   .env.local
+   .env.development
+   .env.production
+   
+   # Build outputs
+   dist/
+   build/
+   .next/
+   .vite/
+   
+   # OS files
+   .DS_Store
+   Thumbs.db
