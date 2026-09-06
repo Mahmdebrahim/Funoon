@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ROUTES } from '../../../config/routes'
+import Button from "../../../components/Ui/Button";
 import api from '../../../services/api'
 import { toast } from 'react-hot-toast'
 import { Loader2, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
@@ -233,23 +234,20 @@ export default function ResetPasswordPage() {
                 </div>
 
                 {/* Submit */}
-                <button
+                <Button
                     type="submit"
-                    disabled={loading}
-                    className="w-full py-4 bg-primary text-white font-body text-sm 
-                     font-semibold tracking-wider hover:bg-primary/90 
-                     transition-premium flex items-center justify-center gap-2 
-                     disabled:opacity-50 disabled:cursor-not-allowed rounded-none"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    isLoading={loading}
                 >
                     {loading ? (
-                        <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>جاري الحفظ...</span>
-                        </>
+                        <span>جاري الحفظ...</span>
+
                     ) : (
                         <span>حفظ كلمة المرور</span>
                     )}
-                </button>
+                </Button>
             </form>
 
             <p className="text-center text-sm text-on-surface-variant font-body">

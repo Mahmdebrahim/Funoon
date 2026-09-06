@@ -1,4 +1,4 @@
-// src/validators/admin-withdrawal.validator.js
+// src/validators/admin.validator.js
 const { body } = require("express-validator");
 
 const approveWithdrawalValidator = []; // No body required
@@ -17,8 +17,8 @@ const rejectWithdrawalValidator = [
     .notEmpty()
     .withMessage("Rejection reason is required")
     .trim()
-    .isLength({ min: 10, max: 500 })
-    .withMessage("Reason must be 10-500 characters"),
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Reason must be 5-500 characters"),
 ];
 
 module.exports = {

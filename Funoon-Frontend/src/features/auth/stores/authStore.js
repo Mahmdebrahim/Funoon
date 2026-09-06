@@ -1,12 +1,16 @@
+// src/features/auth/stores/authStore.js
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 
-// Access Token: 7 أيام (كافي وآمن)
-// Refresh Token: 90 يوم (في الـ backend)
- let _refreshPromise = null
+let _refreshPromise = null;
+
+export let sharedQueryClient = null;
+export function setSharedQueryClient(client) {
+  sharedQueryClient = client;
+}
 
 export const useAuthStore = create(
   persist(
@@ -14,7 +18,6 @@ export const useAuthStore = create(
       user: null,
       accessToken: null,
       isAuthenticated: false,
-      isLoading: false, // ← false دايماً، persist بيحمل فوراً
 
       login: (user, token) => {
         localStorage.setItem("accessToken", token);
@@ -33,9 +36,13 @@ export const useAuthStore = create(
             },
           );
         } catch {
+          // ignore logout API errors
         } finally {
           localStorage.removeItem("accessToken");
           set({ user: null, accessToken: null, isAuthenticated: false });
+          if (sharedQueryClient) {
+            sharedQueryClient.clear();
+          }
         }
       },
 
@@ -44,17 +51,32 @@ export const useAuthStore = create(
           user: state.user ? { ...state.user, ...updates } : null,
         })),
 
+      refreshUser: async () => {
+        const token = get().accessToken || localStorage.getItem("accessToken");
+        if (!token) return null;
+        try {
+          const user = await get()._fetchUser(token);
+          set({ user, isAuthenticated: true });
+          return user;
+        } catch {
+          try {
+            await get()._refreshSilently();
+            return get().user;
+          } catch {
+            return null;
+          }
+        }
+      },
+
       setToken: (token) => {
         localStorage.setItem("accessToken", token);
         set({ accessToken: token, isAuthenticated: true });
       },
 
-      // بيشتغل في الخلفية بدون أي UI blocking
       initializeAuth: async () => {
         const token = get().accessToken || localStorage.getItem("accessToken");
 
         if (!token) {
-          // جرب الـ refresh cookie صامت
           try {
             await get()._refreshSilently();
           } catch {
@@ -63,23 +85,19 @@ export const useAuthStore = create(
           return;
         }
 
-        // تحقق من الـ token في الخلفية صامت
         try {
           const user = await get()._fetchUser(token);
-          set({ user, isAuthenticated: true }); // بس حدّث الـ user
+          set({ user, isAuthenticated: true });
         } catch {
-          // Token انتهى، جرب refresh
           try {
             await get()._refreshSilently();
           } catch {
-            // كل حاجة فشلت → logout صامت
             localStorage.removeItem("accessToken");
             set({ user: null, accessToken: null, isAuthenticated: false });
           }
         }
       },
 
-      // Private helpers
       _fetchUser: async (token) => {
         const res = await axios.get(`${API_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -101,8 +119,6 @@ export const useAuthStore = create(
             set({ user, accessToken: newToken, isAuthenticated: true });
           })
           .catch((err) => {
-            // ← أضيف ده
-            // الـ refresh فشل → امسح كل حاجة نهائياً
             localStorage.removeItem("accessToken");
             set({ user: null, accessToken: null, isAuthenticated: false });
             throw err;

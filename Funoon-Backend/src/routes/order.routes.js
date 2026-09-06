@@ -7,11 +7,7 @@ const { protect, restrictTo } = require("../middlewares/auth.middleware");
 
 // Protected routes (Buyer)
 router.post("/checkout", protect, orderController.checkout);
-router.put(
-  "/:orderId/confirm-delivery",
-  protect,
-  orderController.confirmDelivery,
-);
+// router.post("/verify-payment", protect, orderController.verifyPayment);
 
 // Protected routes (Artist)
 router.put(
@@ -20,10 +16,20 @@ router.put(
   restrictTo("artist"),
   orderController.processOrder,
 );
+router.patch("/:orderId/cancel", protect, orderController.cancelOrder);
+router.get("/my-orders", protect, orderController.getMyOrders);
+router.get("/my-sales", protect, orderController.getMySales);
+router.get("/:id", protect, orderController.getOrderById);
+router.patch(
+  "/:orderId/confirm-delivery",
+  protect,
+  orderController.confirmDelivery,
+);
+router.put("/:orderId/status", protect, orderController.updateOrderStatus);
 // router.put(
 //   "/:orderId/ship",
 //   protect,
-//   restrictTo("artist"),
+//   restrictTo("artist"),  
 //   orderController.shipOrder,
 // );
 

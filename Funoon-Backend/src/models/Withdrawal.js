@@ -1,10 +1,10 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const withdrawalSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
       index: true,
     },
@@ -15,14 +15,14 @@ const withdrawalSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'APPROVED', 'REJECTED', 'PAID', 'FAILED'],
-      default: 'PENDING',
+      enum: ["PENDING", "APPROVED", "REJECTED", "PAID", "FAILED"],
+      default: "PENDING",
       index: true,
     },
     bankDetails: {
-      iban:          { type: String, required: true },
+      iban: { type: String, required: true },
       accountHolder: { type: String, required: true },
-      bankName:      { type: String, required: true },
+      bankName: { type: String, required: true },
     },
     rejectionReason: {
       type: String,
@@ -43,10 +43,19 @@ const withdrawalSchema = new mongoose.Schema(
     moyasarResponse: {
       type: mongoose.Schema.Types.Mixed,
     },
+    // ═══ دورة حياة السحب (Audit Trail) ═══
+    approvedAt: { type: Date },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    paidAt: { type: Date }, // ✅ إمتى اتحوّل فعلاً
+    paidBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    rejectedAt: { type: Date },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-module.exports = mongoose.model('Withdrawal', withdrawalSchema);
+module.exports = mongoose.model("Withdrawal", withdrawalSchema);

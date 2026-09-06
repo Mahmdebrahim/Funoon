@@ -6,6 +6,9 @@ dotenv.config();
 
 const app = require("./src/app");
 const { connectDB } = require("./src/config");
+require("./src/jobs/fundsRelease.job").startFundsReleaseJob();
+require("./src/jobs/expiredOrdersCleanup.job").startExpiredOrdersCleanupJob();
+require("./src/jobs/subscriptionExpiry.job").startSubscriptionExpiringJob();
 const logger = require("./src/utils/logger");
 
 // ─── Handle Uncaught Exceptions ──────────────────────────────────────────────

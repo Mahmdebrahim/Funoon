@@ -1,27 +1,30 @@
+// src/app/App.jsx
 import { useEffect } from 'react'
 import { Providers } from './providers'
 import { AppRouter } from './router'
 import { useAuthStore } from '../features/auth/stores/authStore'
+import { useCartStore } from '../features/cart/stores/cartStore'
+import ErrorBoundary from '../features/pages/common/ErrorBoundary';
 
-// This component lives inside Providers so it can safely use hooks
 function AuthInitializer({ children }) {
-  const { initializeAuth, isLoading } = useAuthStore()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const initializeAuth = useAuthStore((s) => s.initializeAuth)
+  const fetchCart = useCartStore((s) => s.fetchCart)
+  const resetCart = useCartStore((s) => s.resetCart)
 
+  // ✅ مهم: تحقق من الـ auth state عند بدء التطبيق
   useEffect(() => {
     initializeAuth()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initializeAuth])
 
-  // Show a minimal full-screen loader while checking session
-  // if (isLoading) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center bg-surface">
-  //       <div className="flex flex-col items-center gap-4">
-  //         <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-  //         <p className="text-sm text-on-surface-variant font-body">جارٍ التحقق من الجلسة...</p>
-  //       </div>
-  //     </div>
-  //   )
-  // }
+  // ✅ حمل الـ cart لما المستخدم يسجل دخول
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCart()
+    } else {
+      resetCart()
+    }
+  }, [isAuthenticated, fetchCart, resetCart])
 
   return children
 }
@@ -30,7 +33,9 @@ export default function App() {
   return (
     <Providers>
       <AuthInitializer>
-        <AppRouter />
+        <ErrorBoundary>
+          <AppRouter />
+        </ErrorBoundary>
       </AuthInitializer>
     </Providers>
   )

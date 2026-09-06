@@ -32,7 +32,13 @@ router.put(
 
 // Avatar
 router.post("/avatar", upload.single("avatar"), userController.uploadAvatar);
-
+router.post(
+  "/cover-image",
+  protect,
+  upload.single("coverImage"),
+  userController.uploadCoverImage,
+);
+router.delete("/cover-image", protect, userController.deleteCoverImage);
 // Password
 router.post(
   "/change-password",
@@ -55,5 +61,6 @@ router.delete("/account", userController.deleteAccount);
 // Address endpoints
 router.put("/address", protect, userController.updateAddress);
 router.get("/address", protect, userController.getAddress);
+router.post("/address/lookup", protect, userController.lookupAddress);
 
 module.exports = router;

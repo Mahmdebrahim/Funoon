@@ -12,32 +12,17 @@ const {
 const ApiResponse = require("../utils/api-response");
 const catchAsync = require("../utils/catch-async");
 const logger = require("../utils/logger");
+const eventEmitter = require("../events/event-emitter");
+const EVENTS = require("../events/events");
 
 const otoService = OTOService;
 
-/**
- * ✅ Helper: فلترة خيارات الشحن (حسب توصيات دعم OTO)
- * - استبعاد coldDelivery (مش محتاجينه للوحات الفنية)
- * - قبول فقط toCustomerDoorstep (توصيل لباب العميل)
- * - قبول فقط freePickup أو freePickupDropoff (استلام من الفنان)
- * - استبعاد pickupByCustomer (PUDO - العميل يروح الفرع)
- * - استبعاد dropoffOnly (الفنان يروح الفرع)
- */
-const filterShippingOptions = (deliveryOptions = []) =>
-  deliveryOptions.filter((opt) => {
-    // ❌ استبعاد الشحن المبرد (مش للوحات الفنية)
-    if (opt.serviceType === "coldDelivery") return false;
-
-    // ❌ استبعاد PUDO (العميل مش هيرفع ياخد من فرع)
+// ✅ Helper: فلترة خيارات الشحن
+const filterShippingOptions = (deliveryOptions = [], artworkPrice = null) => {
+  return (deliveryOptions || []).filter((opt) => {
     if (opt.deliveryType === "pickupByCustomer") return false;
-
-    // ❌ استبعاد dropoffOnly (الفنان مش هيرفع يودّي)
     if (opt.pickupDropoff === "dropoffOnly") return false;
-
-    // ✅ لازم يوصل لحد البيت
     if (opt.deliveryType !== "toCustomerDoorstep") return false;
-
-    // ✅ لازم الشركة تاخد من عنوان الفنان (مش من الفرع)
     if (
       opt.pickupDropoff !== "freePickup" &&
       opt.pickupDropoff !== "freePickupDropoff"
@@ -45,8 +30,20 @@ const filterShippingOptions = (deliveryOptions = []) =>
       return false;
     }
 
+    if (
+      artworkPrice != null &&
+      opt.maxOrderValue &&
+      artworkPrice > opt.maxOrderValue
+    ) {
+      logger.info(
+        `🚫 Excluding ${opt.deliveryCompanyName}: maxOrderValue ${opt.maxOrderValue} < artworkPrice ${artworkPrice}`,
+      );
+      return false;
+    }
+
     return true;
   });
+};
 
 // @desc    Calculate shipping cost (للـ Frontend قبل الـ Checkout)
 // @route   POST /api/v1/shipping/calculate
@@ -66,19 +63,18 @@ const calculateShipping = catchAsync(async (req, res, next) => {
     length: artwork.dimensions?.width || 60,
     width: artwork.dimensions?.height || 80,
     height: artwork.dimensions?.depth || 3,
+    shippingType: artwork.shippingType || "standard",
   });
 
   const allOptions = response.deliveryCompany || [];
-  const validOptions = filterShippingOptions(allOptions);
+  const validOptions = filterShippingOptions(allOptions, artwork.price);
 
   logger.info(
     `📦 calculateShipping: ${allOptions.length} total, ${validOptions.length} valid after filtering`,
   );
 
-  // ✅ لو مفيش خيارات صالحة، نستخدم كل الخيارات كـ fallback
   const optionsToShow = validOptions.length > 0 ? validOptions : allOptions;
 
-  // ✅ اختار الأرخص من الخيارات الصالحة كـ recommended
   const cheapestOption = optionsToShow.reduce(
     (min, opt) => (opt.price < min.price ? opt : min),
     optionsToShow[0] || { price: Infinity },
@@ -94,7 +90,10 @@ const calculateShipping = catchAsync(async (req, res, next) => {
         carrier: option.deliveryCompanyName,
         deliveryOptionName: option.deliveryOptionName,
         price: option.price,
-        estimatedDeliveryDate: option.estimatedDeliveryDate,
+        avgDeliveryTime: option.avgDeliveryTime,
+        pickupCutOffTime: option.pickupCutOffTime,
+        maxFreeWeight: option.maxFreeWeight,
+        extraWeightPerKg: option.extraWeightPerKg,
         serviceType: option.serviceType,
         deliveryType: option.deliveryType,
         pickupDropoff: option.pickupDropoff,
@@ -163,19 +162,30 @@ const createShipment = catchAsync(async (req, res, next) => {
   // ═══════════════════════════════════════════════════════════════
   // ✅ الخطوة 1: Create Order (بدون createShipment)
   // ═══════════════════════════════════════════════════════════════
+  const dims = order.items.reduce(
+    (acc, item) => {
+      const d = item.artworkSnapshot?.dimensions || {};
+      return {
+        width: Math.max(acc.width, d.width || 60),
+        length: Math.max(acc.length, d.height || 80),
+        height: acc.height + (d.depth || 3),
+        weight: acc.weight + (d.weight || 2),
+      };
+    },
+    { width: 0, length: 0, height: 0, weight: 0 },
+  );
+
   const orderData = {
     orderId: funoonOrderId,
     deliveryOptionId: deliveryOptionId,
     paymentMethod: "paid",
-    amount: order.financials.totalAmount,
+    amount: order.financials.subtotal,
     currency: order.financials.currency || "SAR",
     packageCount: order.items.length,
-    packageWeight: order.items.reduce((sum, item) => {
-      return sum + (item.artworkSnapshot?.dimensions?.weight || 2);
-    }, 0),
-    boxWidth: 60,
-    boxLength: 80,
-    boxHeight: 5,
+    packageWeight: dims.weight,
+    boxWidth: dims.width,
+    boxLength: dims.length,
+    boxHeight: dims.height,
     senderInformation: {
       senderFullName: artistAddress.name || "Artist",
       senderMobile: artistAddress.phone?.replace(/[^0-9]/g, "") || "0500000000",
@@ -214,7 +224,7 @@ const createShipment = catchAsync(async (req, res, next) => {
     })),
   };
 
-  logger.info(`📦 [Step 1/3] Creating OTO order for ${order._id}...`);
+  logger.info(`📦 [Step 1/4] Creating OTO order for ${order._id}...`);
 
   let otoOrderResponse;
   try {
@@ -236,31 +246,29 @@ const createShipment = catchAsync(async (req, res, next) => {
     );
   }
 
-  logger.info("✅ [Step 1/3] OTO order created successfully");
+  logger.info("✅ [Step 1/4] OTO order created successfully");
   logger.info(`   🔑 OTO ID: ${otoOrderResponse.otoId || "(not returned)"}`);
 
   // ═══════════════════════════════════════════════════════════════
   // ✅ الخطوة 2: Create Shipment (endpoint منفصل)
   // ═══════════════════════════════════════════════════════════════
-  logger.info(`📦 [Step 2/3] Creating shipment for: ${funoonOrderId}...`);
+  logger.info(`📦 [Step 2/4] Creating shipment for: ${funoonOrderId}...`);
 
   let shipmentResponse = null;
   try {
-    // استنى ثانيتين عشان OTO يعالج الأوردر
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     shipmentResponse = await otoService.createShipment(
       funoonOrderId,
       deliveryOptionId,
     );
-    logger.info("✅ [Step 2/3] OTO shipment created successfully");
+    logger.info("✅ [Step 2/4] OTO shipment created successfully");
     logger.info(
       "📥 createShipment response:",
       JSON.stringify(shipmentResponse, null, 2),
     );
   } catch (err) {
     logger.error("❌ createShipment failed:", err.message || err);
-    // الأوردر اتعمل بس الشحنة لأ - هنكمل بس نحط warning
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -268,59 +276,85 @@ const createShipment = catchAsync(async (req, res, next) => {
   // ═══════════════════════════════════════════════════════════════
   let awbResponse = null;
   try {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     awbResponse = await otoService.printAWB(funoonOrderId);
-    logger.info("✅ [Step 3/3] AWB retrieved successfully");
+    logger.info("✅ [Step 3/4] AWB retrieved successfully");
     logger.info("📥 printAWB response:", JSON.stringify(awbResponse, null, 2));
   } catch (err) {
     logger.warn(
-      "⚠️ [Step 3/3] Could not retrieve AWB yet (may come via webhook later):",
+      "⚠️ [Step 3/4] Could not retrieve AWB yet (may come via webhook later):",
       err.otoErrorMessage || err.message,
     );
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ استخراج البيانات من الـ responses
+  // ✅ الخطوة 4: جلب البيانات الكاملة من orderStatus (مع Retry Logic)
   // ═══════════════════════════════════════════════════════════════
-  // البيانات الأساسية من shipmentResponse (ده الأهم)
-  const trackingNumber =
-    shipmentResponse?.trackingNumber ||
-    shipmentResponse?.awbNumber ||
-    awbResponse?.trackingNumber ||
-    otoOrderResponse?.trackingNumber ||
-    "";
+  let orderStatus = null;
+  let trackingNumber = "";
+  let trackingUrl = "";
+  let awbUrl = "";
+  let carrier = "";
 
-  const trackingUrl =
-    shipmentResponse?.trackingUrl ||
-    shipmentResponse?.trackingURL ||
-    awbResponse?.trackingURL ||
-    awbResponse?.trackingUrl ||
-    otoOrderResponse?.trackingUrl ||
-    otoOrderResponse?.trackingURL ||
-    "";
+  const maxRetries = 2;
+  const retryDelay = 1500;
 
-  const awbUrl =
-    awbResponse?.printAWBURL ||
-    awbResponse?.printAwbUrl ||
-    awbResponse?.awbUrl ||
-    shipmentResponse?.printAWBURL ||
-    otoOrderResponse?.printAWBURL ||
-    "";
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const waitTime = attempt === 1 ? 2000 : retryDelay;
+      logger.info(
+        `⏳ [Step 4/4] Attempt ${attempt}/${maxRetries} - waiting ${waitTime / 1000}s before fetching orderStatus...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
 
-  const dcTrackingNumber =
-    shipmentResponse?.dcTrackingNumber ||
-    shipmentResponse?.shipmentId ||
-    (otoOrderResponse?.otoId ? String(otoOrderResponse.otoId) : "");
+      orderStatus = await otoService.getOrderStatus(funoonOrderId);
 
-  logger.info(`📊 Extracted shipping info:`);
+      if (orderStatus?.success) {
+        logger.info(
+          `✅ [Step 4/4] Attempt ${attempt} - orderStatus retrieved`,
+        );
+
+        // استخراج البيانات
+        trackingNumber =
+          orderStatus?.shipmentId || orderStatus?.trackingNumber || "";
+        trackingUrl = orderStatus?.trackingUrl || "";
+        awbUrl = orderStatus?.printAWBURL || "";
+        carrier = orderStatus?.deliveryCompany || "";
+
+        // لو لقينا trackingNumber، كده كفاية
+        if (trackingNumber) {
+          logger.info(`🎯 Got tracking data on attempt ${attempt}`);
+          break;
+        } else {
+          logger.info(
+            `⚠️ Attempt ${attempt} - trackingNumber still empty, will retry...`,
+          );
+        }
+      }
+    } catch (err) {
+      logger.warn(`⚠️ Attempt ${attempt} failed:`, err.message);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ Fallback: لو لسه مفيش بيانات، هنعتمد على الـ webhook اللي هيجي
+  // ═══════════════════════════════════════════════════════════════
+  if (!trackingNumber) {
+    logger.warn(
+      `⚠️ Could not get tracking data after ${maxRetries} attempts - will rely on webhook`,
+    );
+  }
+
+  logger.info(`📊 Final shipping info:`);
   logger.info(
-    `   📦 Tracking Number: ${trackingNumber || "(empty - may come later via webhook)"}`,
+    `   📦 Tracking Number: ${trackingNumber || "(waiting for webhook)"}`,
   );
   logger.info(
-    `   🔗 Tracking URL: ${trackingUrl || "(empty - may come later via webhook)"}`,
+    `   🔗 Tracking URL: ${trackingUrl || "(waiting for webhook)"}`,
   );
+  logger.info(`   📄 AWB URL: ${awbUrl || "(waiting for webhook)"}`);
   logger.info(
-    `   📄 AWB URL: ${awbUrl || "(empty - may come later via webhook)"}`,
+    `   🚚 Carrier: ${carrier || order.shipping?.deliveryCompanyName || "OTO"}`,
   );
 
   // ═══════════════════════════════════════════════════════════════
@@ -329,14 +363,16 @@ const createShipment = catchAsync(async (req, res, next) => {
   const updateData = {
     status: "PROCESSING",
     "shipping.carrier":
-      shipmentResponse?.deliveryCompany ||
-      order.shipping?.deliveryCompanyName ||
-      "OTO",
+      carrier || order.shipping?.deliveryCompanyName || "OTO",
     "shipping.trackingNumber": trackingNumber,
     "shipping.trackingUrl": trackingUrl,
     "shipping.awbUrl": awbUrl,
     "shipping.otoListId": funoonOrderId,
-    "shipping.otoShipmentId": dcTrackingNumber,
+    "shipping.otoShipmentId":
+      orderStatus?.shipmentId ||
+      orderStatus?.dcTrackingNumber ||
+      shipmentResponse?.shipmentId ||
+      (otoOrderResponse?.otoId ? String(otoOrderResponse.otoId) : ""),
     "shipping.shippedAt": new Date(),
   };
 
@@ -352,23 +388,34 @@ const createShipment = catchAsync(async (req, res, next) => {
 
   logger.info(`✅ Order ${order._id} updated to PROCESSING`);
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ Response للـ Frontend
+  // ═══════════════════════════════════════════════════════════════
+  const responseData = {
+    order: {
+      _id: updatedOrder._id,
+      status: updatedOrder.status,
+      funoonOrderId: funoonOrderId,
+    },
+    shipping: {
+      carrier: updatedOrder.shipping?.carrier,
+      trackingNumber: updatedOrder.shipping?.trackingNumber,
+      trackingUrl: updatedOrder.shipping?.trackingUrl,
+      awbUrl: updatedOrder.shipping?.awbUrl,
+      deliveryCompanyName: updatedOrder.shipping?.deliveryCompanyName,
+      estimatedDeliveryDate: updatedOrder.shipping?.estimatedDeliveryDate,
+    },
+  };
+
+  // لو البيانات لسه فاضية، نبعت message واضح
+  if (!trackingNumber) {
+    responseData.message =
+      "تم إنشاء الشحنة بنجاح. بيانات التتبع والبولصة ستصل خلال دقائق قليلة.";
+  }
+
   return ApiResponse.success(
     res,
-    {
-      order: {
-        _id: updatedOrder._id,
-        status: updatedOrder.status,
-        funoonOrderId: funoonOrderId,
-      },
-      shipping: {
-        carrier: updatedOrder.shipping?.carrier,
-        trackingNumber: updatedOrder.shipping?.trackingNumber,
-        trackingUrl: updatedOrder.shipping?.trackingUrl,
-        awbUrl: updatedOrder.shipping?.awbUrl,
-        deliveryCompanyName: updatedOrder.shipping?.deliveryCompanyName,
-        estimatedDeliveryDate: updatedOrder.shipping?.estimatedDeliveryDate,
-      },
-    },
+    responseData,
     "Shipment created successfully",
   );
 });
@@ -386,13 +433,42 @@ const getAWBUrl = catchAsync(async (req, res, next) => {
   }
 
   if (!order.shipping?.awbUrl) {
-    // ✅ محاولة جلب الـ AWB من OTO لو مش محفوظ
+    // ✅ محاولة 1: نجيب الـ awbUrl من orderStatus (الأفضل)
+    try {
+      const orderStatus = await otoService.getOrderStatus(
+        `FUNOON-${order._id}`,
+      );
+
+      if (orderStatus?.printAWBURL) {
+        order.shipping.awbUrl = orderStatus.printAWBURL;
+        if (orderStatus.trackingUrl && !order.shipping.trackingUrl) {
+          order.shipping.trackingUrl = orderStatus.trackingUrl;
+        }
+        if (orderStatus.shipmentId && !order.shipping.trackingNumber) {
+          order.shipping.trackingNumber = orderStatus.shipmentId;
+        }
+        await order.save();
+
+        logger.info(`✅ AWB URL retrieved from orderStatus for ${order._id}`);
+
+        return ApiResponse.success(
+          res,
+          {
+            awbUrl: order.shipping.awbUrl,
+            trackingUrl: order.shipping.trackingUrl,
+          },
+          "AWB URL retrieved",
+        );
+      }
+    } catch (err) {
+      logger.warn("Could not retrieve AWB from orderStatus:", err.message);
+    }
+
+    // ✅ محاولة 2 (fallback): نجرب printAWB endpoint
     try {
       const awbResponse = await otoService.printAWB(`FUNOON-${order._id}`);
       if (awbResponse?.printAWBURL || awbResponse?.awbUrl) {
         const awbUrl = awbResponse.printAWBURL || awbResponse.awbUrl;
-
-        // احفظ في الـ DB
         order.shipping.awbUrl = awbUrl;
         await order.save();
 
@@ -406,7 +482,7 @@ const getAWBUrl = catchAsync(async (req, res, next) => {
         );
       }
     } catch (err) {
-      logger.warn("Could not retrieve AWB from OTO:", err.message);
+      logger.warn("Could not retrieve AWB from printAWB:", err.message);
     }
 
     throw new BadRequestError(
@@ -451,27 +527,44 @@ const trackShipment = catchAsync(async (req, res, next) => {
     );
   }
 
-  // ✅ محاولة جلب آخر تحديثات من OTO
   let otoStatus = null;
   try {
     const statusData = await otoService.getOrderStatus(
       order.shipping.otoListId,
     );
+
     otoStatus = Array.isArray(statusData) ? statusData[0] : statusData;
 
-    // لو فيه بيانات جديدة من OTO، حدّث الأوردر
-    if (otoStatus?.trackingNumber && !order.shipping.trackingNumber) {
-      order.shipping.trackingNumber = otoStatus.trackingNumber;
-    }
-    if (otoStatus?.trackingUrl && !order.shipping.trackingUrl) {
-      order.shipping.trackingUrl =
-        otoStatus.trackingUrl || otoStatus.trackingURL;
-    }
-    if (otoStatus?.printAWBURL && !order.shipping.awbUrl) {
-      order.shipping.awbUrl = otoStatus.printAWBURL || otoStatus.printAwbUrl;
+    if (otoStatus?.success === false) {
+      logger.warn("⚠️ orderStatus returned success=false:", otoStatus);
+      otoStatus = null;
     }
 
-    await order.save();
+    if (otoStatus) {
+      let updated = false;
+
+      if (otoStatus.shipmentId && !order.shipping.trackingNumber) {
+        order.shipping.trackingNumber = otoStatus.shipmentId;
+        updated = true;
+      }
+      if (otoStatus.trackingUrl && !order.shipping.trackingUrl) {
+        order.shipping.trackingUrl = otoStatus.trackingUrl;
+        updated = true;
+      }
+      if (otoStatus.printAWBURL && !order.shipping.awbUrl) {
+        order.shipping.awbUrl = otoStatus.printAWBURL;
+        updated = true;
+      }
+      if (otoStatus.deliveryCompany && !order.shipping.carrier) {
+        order.shipping.carrier = otoStatus.deliveryCompany;
+        updated = true;
+      }
+
+      if (updated) {
+        await order.save();
+        logger.info(`✅ Order ${order._id} updated from orderStatus`);
+      }
+    }
   } catch (err) {
     logger.warn("⚠️ Could not fetch tracking info from OTO:", err.message);
   }
@@ -504,7 +597,6 @@ const handleOTOWebhook = catchAsync(async (req, res, next) => {
   logger.info("   Body type:", typeof payload);
   logger.info("   Is Buffer:", Buffer.isBuffer(payload));
 
-  // ✅ Case 1: Buffer
   if (Buffer.isBuffer(payload)) {
     try {
       payload = JSON.parse(payload.toString("utf8"));
@@ -512,18 +604,14 @@ const handleOTOWebhook = catchAsync(async (req, res, next) => {
       logger.error("❌ Could not parse Buffer as JSON");
       return res.status(400).json({ error: "Invalid JSON" });
     }
-  }
-  // ✅ Case 2: String
-  else if (typeof payload === "string") {
+  } else if (typeof payload === "string") {
     try {
       payload = JSON.parse(payload);
     } catch (e) {
       logger.error("❌ Could not parse string as JSON");
       return res.status(400).json({ error: "Invalid JSON" });
     }
-  }
-  // ✅ Case 3: Character-spread object
-  else if (typeof payload === "object" && payload !== null) {
+  } else if (typeof payload === "object" && payload !== null) {
     const keys = Object.keys(payload);
     if (keys.length > 0 && keys.every((k) => !isNaN(parseInt(k)))) {
       try {
@@ -554,15 +642,15 @@ const handleOTOWebhook = catchAsync(async (req, res, next) => {
     brandedTrackingURL,
     printAWBURL,
     dcTrackingNumber,
-    shipmentNumber, // ✅ جديد - OTO بيرجعه أحياناً
+    shipmentNumber,
   } = payload;
+
 
   if (!orderId && !otoId) {
     logger.warn("⚠️ OTO Webhook: No orderId or otoId in payload");
     return res.status(200).json({ received: true });
   }
 
-  // ✅ ابحث عن الأوردر بـ orderId أو otoId أو shipmentNumber
   let funoonOrderId;
   if (orderId) {
     funoonOrderId = orderId.replace("FUNOON-", "");
@@ -614,6 +702,9 @@ const handleOTOWebhook = catchAsync(async (req, res, next) => {
   }
 
   try {
+    const existingOrder = await Order.findById(funoonOrderId);
+    const previousStatus = existingOrder?.status;
+
     const updatedOrder = await Order.findByIdAndUpdate(
       funoonOrderId,
       { $set: updateData },
@@ -629,9 +720,20 @@ const handleOTOWebhook = catchAsync(async (req, res, next) => {
       `✅ Order ${funoonOrderId} updated via webhook: status=${newStatus}, tracking=${trackingNumber || shipmentNumber || "(none)"}`,
     );
 
-    // TODO: إرسال notifications حسب الـ status
-    // if (newStatus === "SHIPPED") → notify buyer
-    // if (newStatus === "DELIVERED") → notify buyer + artist + start 72h timer
+    if (newStatus === "SHIPPED" && previousStatus !== "SHIPPED") {
+      eventEmitter.safeEmit(EVENTS.ORDER_SHIPPED, {
+        buyerId: updatedOrder.buyer,
+        orderId: updatedOrder._id,
+        orderNumber: updatedOrder._id.toString().slice(-6).toUpperCase(),
+        carrier: updatedOrder.shipping?.deliveryCompanyName || updatedOrder.shipping?.carrier || "شركة الشحن",
+      });
+    } else if (newStatus === "DELIVERED" && previousStatus !== "DELIVERED") {
+      eventEmitter.safeEmit(EVENTS.ORDER_DELIVERED, {
+        buyerId: updatedOrder.buyer,
+        orderId: updatedOrder._id,
+        orderNumber: updatedOrder._id.toString().slice(-6).toUpperCase(),
+      });
+    }
   } catch (err) {
     logger.error("❌ Error updating order from webhook:", err.message);
   }

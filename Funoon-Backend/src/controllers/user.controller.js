@@ -4,10 +4,12 @@ const {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
+  ForbiddenError,
 } = require("../utils/api-error");
 const ApiResponse = require("../utils/api-response");
 const catchAsync = require("../utils/catch-async");
-
+const OTOService = require("../services/shipping/oto.service");
+const upload = require("../middlewares/upload.middleware"); // multer middleware
 
 // 1. Get Current User Profile
 const getProfile = catchAsync(async (req, res, next) => {
@@ -24,7 +26,7 @@ const getProfile = catchAsync(async (req, res, next) => {
 
 // 2. Update Profile
 const updateProfile = catchAsync(async (req, res, next) => {
-  const { name, phone, bio, address } = req.body;
+  const { name, phone, bio, address, coverImage, socialLinks } = req.body;
 
   const updates = {};
   if (name !== undefined) updates.name = name;
@@ -33,6 +35,39 @@ const updateProfile = catchAsync(async (req, res, next) => {
   // Only artists can update bio
   if (req.user.role === "artist" && bio !== undefined) {
     updates.bio = bio;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // ✅ Custom Profile Features (Plus/Prestige only)
+  // ═══════════════════════════════════════════════════
+  if (req.user.role === "artist") {
+    const planConfig = req.user.getPlanConfig();
+
+    // coverImage (Plus + Prestige)
+    if (coverImage !== undefined) {
+      if (!planConfig?.features?.coverImage) {
+        throw new BadRequestError(
+          "صورة الغلاف متاحة فقط في باقتي أوبال بلس وأوبال برستيج.",
+        );
+      }
+      updates.coverImage = coverImage;
+    }
+
+    // socialLinks (Plus + Prestige)
+    if (socialLinks !== undefined) {
+      if (!planConfig?.features?.socialLinks) {
+        throw new BadRequestError(
+          "الروابط الاجتماعية متاحة فقط في باقتي أوبال بلس وأوبال برستيج.",
+        );
+      }
+      updates.socialLinks = {
+        instagram: socialLinks.instagram || null,
+        twitter: socialLinks.twitter || null,
+        snapchat: socialLinks.snapchat || null,
+        facebook: socialLinks.facebook || null,
+        website: socialLinks.website || null,
+      };
+    }
   }
 
   // Address updates (merge with existing)
@@ -50,7 +85,7 @@ const updateProfile = catchAsync(async (req, res, next) => {
     { new: true, runValidators: true },
   );
 
-  return ApiResponse.success(res, updatedUser, "Profile updated successfully");
+  return ApiResponse.success(res, updatedUser, "تم تحديث البروفايل بنجاح");
 });
 
 // 3. Upload Avatar
@@ -195,12 +230,77 @@ const deleteAccount = catchAsync(async (req, res, next) => {
   return ApiResponse.success(res, null, "Account deleted successfully");
 });
 
-// src/controllers/user.controller.js
+// @desc    Upload cover image (Plus/Prestige only)
+// @route   POST /api/v1/users/cover-image
+// @access  Private (Artist only)
+const uploadCoverImage = catchAsync(async (req, res, next) => {
+  // 1. لازم يكون فنان
+  if (req.user.role !== "artist") {
+    throw new BadRequestError("صورة الغلاف متاحة للفنانين فقط.");
+  }
+
+  // 2. لازم يكون عنده باقة Plus أو Prestige
+  const planConfig = req.user.getPlanConfig();
+  if (!planConfig?.features?.coverImage) {
+    throw new BadRequestError(
+      "صورة الغلاف متاحة فقط في باقتي أوبال بلس وأوبال برستيج.",
+    );
+  }
+
+  // 3. لازم يكون فيه ملف
+  if (!req.file) {
+    throw new BadRequestError("يرجى رفع صورة.");
+  }
+
+  // 4. رفع الصورة
+  const coverUrl = await FileUploadService.uploadCoverImage(
+    req.file,
+    req.user._id,
+  );
+
+  // 5. حذف الصورة القديمة لو موجودة
+  if (req.user.coverImage) {
+    await FileUploadService.deleteFile(req.user.coverImage);
+  }
+
+  // 6. تحديث المستخدم
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user._id,
+    { $set: { coverImage: coverUrl } },
+    { new: true },
+  );
+
+  return ApiResponse.success(
+    res,
+    { coverImage: coverUrl },
+    "تم رفع صورة الغلاف بنجاح",
+  );
+});
+
+// @desc    Delete cover image
+// @route   DELETE /api/v1/users/cover-image
+// @access  Private (Artist only)
+const deleteCoverImage = catchAsync(async (req, res, next) => {
+  if (req.user.role !== "artist") {
+    throw new BadRequestError("صورة الغلاف متاحة للفنانين فقط.");
+  }
+
+  if (!req.user.coverImage) {
+    throw new BadRequestError("لا توجد صورة غلاف لحذفها.");
+  }
+
+  await FileUploadService.deleteFile(req.user.coverImage);
+
+  await User.findByIdAndUpdate(req.user._id, {
+    $set: { coverImage: null },
+  });
+
+  return ApiResponse.success(res, null, "تم حذف صورة الغلاف");
+});
 
 // @desc    Update user address
 // @route   PUT /api/v1/users/address
 // @access  Private
-
 const updateAddress = catchAsync(async (req, res, next) => {
   
   const { 
@@ -273,6 +373,79 @@ const getAddress = catchAsync(async (req, res, next) => {
   return ApiResponse.success(res, user.address, "Address retrieved");
 });
 
+// @desc    Lookup & save address from OTO short address code
+// @route   POST /api/v1/users/address/lookup
+// @access  Private
+const lookupAddress = catchAsync(async (req, res, next) => {
+  const { shortAddressCode } = req.body;
+
+  // ─── Validation ───
+  if (!shortAddressCode) {
+    throw new BadRequestError("shortAddressCode is required");
+  }
+
+  const cleanedCode = shortAddressCode.trim().toUpperCase();
+  if (!/^[A-Z0-9]{6,10}$/.test(cleanedCode)) {
+    throw new BadRequestError(
+      "Invalid short address code format. Expected 6-10 alphanumeric characters (e.g., RGUC8214).",
+    );
+  }
+
+  // ─── Call OTO API ───
+  let otoResponse;
+  try {
+    otoResponse = await OTOService.getAddressByShortCode(cleanedCode);
+  } catch (error) {
+    // OTO API error (code غلط أو service مش متاح)
+    if (error.otoErrorCode) {
+      throw new BadRequestError(
+        error.otoErrorMessage || "Address not found. Please check the code and try again.",
+      );
+    }
+    throw new Error("Address lookup service unavailable. Please try again later.");
+  }
+
+  const otoData = otoResponse?.data;
+  if (!otoData) {
+    throw new BadRequestError("Address not found. Please check the code and try again.");
+  }
+
+  // ─── Mapping: OTO → User Address ───
+  const address = {
+    city: otoData.cityName || otoData.city?.name || "",
+    district: otoData.districtName || otoData.district?.name || "",
+    street: otoData.streetName || "",
+    buildingNo: otoData.buildingName || "",
+    secondaryAddressNumber: otoData.secondary || "",
+    zipCode: otoData.zipCode || "",
+    shortAddressCode: otoData.shortAddressCode || cleanedCode,
+    lat: otoData.lat || undefined,
+    lon: otoData.lng || undefined,
+    country: otoData.countryShortCode || "SA",
+  };
+
+  // ─── Save to User ───
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    throw new NotFoundError("User not found");
+  }
+
+  user.address = {
+    ...(user.address || {}),
+    ...address,
+  };
+  await user.save();
+
+  return ApiResponse.success(
+    res,
+    {
+      address: user.address,
+      formattedFullAddress: otoData.formattedFullAddress || null,
+    },
+    "Address verified and saved successfully",
+  );
+});
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -283,4 +456,7 @@ module.exports = {
   deleteAccount,
   updateAddress,
   getAddress,
+  lookupAddress,
+  uploadCoverImage, 
+  deleteCoverImage,
 };

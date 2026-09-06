@@ -27,6 +27,7 @@ const artworkSchema = new mongoose.Schema(
       type: Number,
       required: [true, "Price is required"],
       min: [1, "Price must be at least 1 SAR"],
+      max: [5000, "Price cannot exceed 5000 SAR in current launch phase"],
     },
     images: [
       {
@@ -46,7 +47,7 @@ const artworkSchema = new mongoose.Schema(
       type: dimensionsSchema,
       required: [true, "Dimensions are required"],
     },
-    // Weight in KG 
+    // Weight in KG
     weight: {
       type: Number,
       required: [true, "Weight is required"],
@@ -64,15 +65,62 @@ const artworkSchema = new mongoose.Schema(
     category: {
       type: String,
       enum: [
-        "painting",
-        "drawing",
-        "photography",
-        "digital",
-        "sculpture",
-        "mixed",
-        "other",
+        "فن البورتريه",
+        "فن المناظر الطبيعية",
+        "الفن التجريدي",
+        "الفن الواقعي",
+        "فن الطبيعة الصامتة",
+        "الفن الانطباعي",
+        "الفن الإسلامي",
+        "الفن الزخرفي",
+        "الفن السريالي",
+        "الفن التعبيري",
+        "فن البوب",
+        "الفن الكلاسيكي",
+        "الفن التكعيبي",
+        "الفن الشعبي",
+        "الفن المفاهيمي",
+        "اخرى",
       ],
-      default: "other",
+      default: "اخرى",
+    },
+    canvasThickness: {
+      type: String,
+      enum: [
+        "خفيف: 180–250 جم/م²",
+        "متوسط: 250–350 جم/م²",
+        "ثقيل: 350–450 جم/م²",
+        "ثقيل جدًا: 450–600 جم/م²",
+        "فائق السماكة: 600 جم/م²",
+      ],
+      default: null,
+    },
+    paintType: {
+      type: String,
+      enum: [
+        "ألوان الأكريليك",
+        "الألوان الزيتية",
+        "الألوان المائية",
+        "ألوان الفحم",
+        "ألوان الماركر",
+        "ألوان الغواش",
+        "الباستيل الناعم",
+        "الألوان الخشبية",
+        "أوراق الذهب",
+        "أصباغ الريزن",
+        "ألوان السبراي",
+        "الباستيل الزيتي",
+        "الأحبار الفنية",
+        "ألوان القماش",
+        "ألوان الزجاج",
+        "اخرى",
+      ],
+      default: null,
+    },
+    dimensionType: {
+      type: String,
+      enum: ["2D", "3D"],
+      default: "2D",
     },
     medium: { type: String, trim: true },
     tags: [{ type: String, trim: true, lowercase: true }],
@@ -80,6 +128,33 @@ const artworkSchema = new mongoose.Schema(
       type: String,
       enum: ["opal_classic", "opal_plus", "opal_prestige"],
     },
+    reservedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reservedUntil: {
+      type: Date,
+      default: null,
+    },
+
+    // ─── Featured ────────────────────────────────────────────────────────────
+    isFeatured: { type: Boolean, default: false, index: true },
+    featuredAt: { type: Date, default: null },
+
+    approvalStatus: {
+      type: String,
+      enum: ["PENDING_APPROVAL", "APPROVED", "SUSPENDED", "REJECTED"],
+      default: "PENDING_APPROVAL",
+      index: true,
+    },
+    adminNote: { type: String, default: null },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reviewedAt: { type: Date, default: null },
   },
   { timestamps: true, optimisticConcurrency: true },
 );
@@ -87,9 +162,11 @@ const artworkSchema = new mongoose.Schema(
 artworkSchema.index({ artist: 1, isActive: 1 });
 artworkSchema.index({ isSold: 1, isActive: 1 });
 artworkSchema.index({ category: 1 });
+artworkSchema.index({ paintType: 1 });
 artworkSchema.index({ price: 1 });
 artworkSchema.index({ createdAt: -1 });
 artworkSchema.index({ tags: 1 });
+artworkSchema.index({ isFeatured: 1, featuredAt: -1 }); // featured artworks sort
 
 // Auto-calculate shipping type and cover image before save
 artworkSchema.pre("save", function (next) {
@@ -108,3 +185,6 @@ artworkSchema.pre("save", function (next) {
 });
 
 module.exports = mongoose.model("Artwork", artworkSchema);
+
+
+

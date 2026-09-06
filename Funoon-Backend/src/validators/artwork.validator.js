@@ -1,3 +1,6 @@
+
+
+
 const { body } = require("express-validator");
 
 // Create artwork validation
@@ -19,8 +22,8 @@ const createArtworkValidator = [
   body("price")
     .notEmpty()
     .withMessage("Price is required")
-    .isFloat({ min: 1 })
-    .withMessage("Price must be at least 1 SAR"),
+    .isFloat({ min: 1, max: 5000 })
+    .withMessage("سعر اللوحة يجب أن يكون بين 1 و 5,000 ر.س (حد أقصى مؤقت للمرحلة الحالية)"),
 
   body("weight")
     .notEmpty()
@@ -28,41 +31,94 @@ const createArtworkValidator = [
     .isFloat({ min: 0.1 })
     .withMessage("Weight must be at least 0.1 KG"),
 
-  body("dimensions.width")
-    .notEmpty()
-    .withMessage("Width is required")
-    .isFloat({ min: 0.1 })
-    .withMessage("Width must be greater than 0"),
+  // ✅ validator واحد بيتعامل مع JSON string أو object
+  body("dimensions").custom((value, { req }) => {
+    // في الـ update، dimensions اختياري
+    if (value === undefined && req.method === "PUT") return true;
+    if (!value) throw new Error("Dimensions are required");
 
-  body("dimensions.height")
-    .notEmpty()
-    .withMessage("Height is required")
-    .isFloat({ min: 0.1 })
-    .withMessage("Height must be greater than 0"),
+    let dims;
+    try {
+      dims = typeof value === "string" ? JSON.parse(value) : value;
+    } catch {
+      throw new Error("Invalid dimensions format");
+    }
 
-  body("dimensions.depth")
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage("Depth cannot be negative"),
+    if (!dims.width || Number(dims.width) <= 0)
+      throw new Error("Width is required and must be greater than 0");
+    if (!dims.height || Number(dims.height) <= 0)
+      throw new Error("Height is required and must be greater than 0");
+    if (dims.depth !== undefined && Number(dims.depth) < 0)
+      throw new Error("Depth cannot be negative");
+
+    return true;
+  }),
 
   body("category")
     .optional()
     .isIn([
-      "painting",
-      "drawing",
-      "photography",
-      "digital",
-      "sculpture",
-      "mixed",
-      "other",
+      "فن البورتريه",
+      "فن المناظر الطبيعية",
+      "الفن التجريدي",
+      "الفن الواقعي",
+      "فن الطبيعة الصامتة",
+      "الفن الانطباعي",
+      "الفن الإسلامي",
+      "الفن الزخرفي",
+      "الفن السريالي",
+      "الفن التعبيري",
+      "فن البوب",
+      "الفن الكلاسيكي",
+      "الفن التكعيبي",
+      "الفن الشعبي",
+      "الفن المفاهيمي",
+      "اخرى",
     ])
-    .withMessage("Invalid category"),
+    .withMessage("تصنيف غير صحيح"),
+
+  body("paintType")
+    .optional()
+    .isIn([
+      "ألوان الأكريليك",
+      "الألوان الزيتية",
+      "الألوان المائية",
+      "ألوان الفحم",
+      "ألوان الماركر",
+      "ألوان الغواش",
+      "الباستيل الناعم",
+      "الألوان الخشبية",
+      "أوراق الذهب",
+      "أصباغ الريزن",
+      "ألوان السبراي",
+      "الباستيل الزيتي",
+      "الأحبار الفنية",
+      "ألوان القماش",
+      "ألوان الزجاج",
+      "اخرى",
+    ])
+    .withMessage("نوع الألوان غير صحيح"),
+
+  body("canvasThickness")
+    .optional()
+    .isIn([
+      "خفيف: 180–250 جم/م²",
+      "متوسط: 250–350 جم/م²",
+      "ثقيل: 350–450 جم/م²",
+      "ثقيل جدًا: 450–600 جم/م²",
+      "فائق السماكة: 600 جم/م²",
+    ])
+    .withMessage("سماكة قماش الكانفاس غير صحيحة"),
+
+  body("dimensionType")
+    .optional()
+    .isIn(["2D", "3D"])
+    .withMessage("نوع أبعاد اللوحة غير صحيح"),
 
   body("medium")
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage("Medium cannot exceed 100 characters"),
+    .withMessage("الوسيط لا يمكن ان يتجاوز 100 حرف"),
 
   body("tags")
     .optional()
@@ -97,41 +153,94 @@ const updateArtworkValidator = [
 
   body("price")
     .optional()
-    .isFloat({ min: 1 })
-    .withMessage("Price must be at least 1 SAR"),
+    .isFloat({ min: 1, max: 5000 })
+    .withMessage("سعر اللوحة يجب أن يكون بين 1 و 5,000 ر.س (حد أقصى مؤقت للمرحلة الحالية)"),
 
   body("weight")
     .optional()
     .isFloat({ min: 0.1 })
     .withMessage("Weight must be at least 0.1 KG"),
 
-  body("dimensions.width")
-    .optional()
-    .isFloat({ min: 0.1 })
-    .withMessage("Width must be greater than 0"),
+  body("dimensions").custom((value, { req }) => {
+    if (value === undefined && req.method === "PUT") return true;
+    if (!value) throw new Error("Dimensions are required");
 
-  body("dimensions.height")
-    .optional()
-    .isFloat({ min: 0.1 })
-    .withMessage("Height must be greater than 0"),
+    let dims;
+    try {
+      dims = typeof value === "string" ? JSON.parse(value) : value;
+    } catch {
+      throw new Error("Invalid dimensions format");
+    }
 
-  body("dimensions.depth")
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage("Depth cannot be negative"),
+    if (!dims.width || Number(dims.width) <= 0)
+      throw new Error("Width is required and must be greater than 0");
+    if (!dims.height || Number(dims.height) <= 0)
+      throw new Error("Height is required and must be greater than 0");
+    if (dims.depth !== undefined && Number(dims.depth) < 0)
+      throw new Error("Depth cannot be negative");
+
+    return true;
+  }),
 
   body("category")
     .optional()
     .isIn([
-      "painting",
-      "drawing",
-      "photography",
-      "digital",
-      "sculpture",
-      "mixed",
-      "other",
+      "فن البورتريه",
+      "فن المناظر الطبيعية",
+      "الفن التجريدي",
+      "الفن الواقعي",
+      "فن الطبيعة الصامتة",
+      "الفن الانطباعي",
+      "الفن الإسلامي",
+      "الفن الزخرفي",
+      "الفن السريالي",
+      "الفن التعبيري",
+      "فن البوب",
+      "الفن الكلاسيكي",
+      "الفن التكعيبي",
+      "الفن الشعبي",
+      "الفن المفاهيمي",
+      "اخرى",
     ])
     .withMessage("Invalid category"),
+
+  body("paintType")
+    .optional()
+    .isIn([
+      "ألوان الأكريليك",
+      "الألوان الزيتية",
+      "الألوان المائية",
+      "ألوان الفحم",
+      "ألوان الماركر",
+      "ألوان الغواش",
+      "الباستيل الناعم",
+      "الألوان الخشبية",
+      "أوراق الذهب",
+      "أصباغ الريزن",
+      "ألوان السبراي",
+      "الباستيل الزيتي",
+      "الأحبار الفنية",
+      "ألوان القماش",
+      "ألوان الزجاج",
+      "اخرى",
+    ])
+    .withMessage("نوع الألوان غير صحيح"),
+
+  body("canvasThickness")
+    .optional()
+    .isIn([
+      "خفيف: 180–250 جم/م²",
+      "متوسط: 250–350 جم/م²",
+      "ثقيل: 350–450 جم/م²",
+      "ثقيل جدًا: 450–600 جم/م²",
+      "فائق السماكة: 600 جم/م²",
+    ])
+    .withMessage("Invalid canvas thickness"),
+
+  body("dimensionType")
+    .optional()
+    .isIn(["2D", "3D"])
+    .withMessage("Invalid dimension type"),
 
   body("medium")
     .optional()

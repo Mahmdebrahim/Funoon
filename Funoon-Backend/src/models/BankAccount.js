@@ -31,10 +31,10 @@ const bankAccountSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    isVerified: {
-      type: Boolean,
-      default: false, // الأدمن هو اللي بيؤكد
-    },
+    isVerified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    rejectionReason: { type: String },
   },
   {
     timestamps: true,

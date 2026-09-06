@@ -22,19 +22,19 @@ class MoyasarService {
   }
 
   // ─── Invoices ─────────────────────────────────────────────────────────────
-  // Invoice = صفحة دفع جاهزة بـ URL نبعتها للـ Frontend
-  // المبلغ لازم يوصل بالهللات (SAR * 100)
 
+  // Invoice = صفحة دفع جاهزة بـ URL نبعتها للـ Frontend
   async createInvoice(invoiceData) {
     try {
       const payload = {
-        amount: invoiceData.amount, // بالهللات
+        amount: invoiceData.amount,
         currency: "SAR",
         description: invoiceData.description,
-        callback_url: invoiceData.callbackUrl, // Moyasar بتبعت webhook هنا
-        success_url: invoiceData.successUrl, // redirect بعد نجاح الدفع
-        back_url: invoiceData.backUrl, // redirect لو رجع
-        metadata: invoiceData.metadata, // orderIds + buyerId + type
+        callback_url: invoiceData.callbackUrl,
+        success_url: invoiceData.successUrl,
+        back_url: invoiceData.backUrl,
+        metadata: invoiceData.metadata,
+        expired_at: invoiceData.expired_at,
       };
 
       console.log(
@@ -48,7 +48,6 @@ class MoyasarService {
         "📥 Moyasar createInvoice response:",
         JSON.stringify(response.data, null, 2),
       );
-
       return response.data;
     } catch (error) {
       console.error(
@@ -73,6 +72,25 @@ class MoyasarService {
       throw new Error(
         error.response?.data?.message || "Failed to fetch invoice",
       );
+    }
+  }
+
+  // Cancel invoice = Moyasar ترفض أي دفع قادم على الـ invoice ده
+  async cancelInvoice(invoiceId) {
+    if (!invoiceId) return null;
+    try {
+      const response = await this.axiosInstance.put(
+        `/invoices/${invoiceId}/cancel`,
+      );
+      console.log(`✅ Moyasar invoice cancelled: ${invoiceId}`);
+      return response.data;
+    } catch (error) {
+      // مش نرمي — الـ webhook safety net هيغطي لو الـ cancel فشل
+      console.warn(
+        `⚠️ Failed to cancel invoice ${invoiceId}:`,
+        error.response?.data?.message || error.message,
+      );
+      return null;
     }
   }
 
@@ -147,6 +165,43 @@ class MoyasarService {
       );
       throw new Error(
         error.response?.data?.message || "Failed to fetch payout",
+      );
+    }
+  }
+
+  // ─── Refunds ──────────────────────────────────────────────────────────────
+  // Refund = إرجاع فلوس للعميل على نفس الـ payment
+  // المبلغ بالهللات (SAR * 100)
+
+  async refundPayment(paymentId, refundData = {}) {
+    try {
+      const payload = {
+        amount: refundData.amount, // بالهللات (لو مش موجود = full refund)
+        reason: refundData.reason || "Order cancelled by buyer",
+      };
+
+      console.log(
+        "📤 Moyasar refundPayment payload:",
+        JSON.stringify(payload, null, 2),
+      );
+
+      const response = await this.axiosInstance.post(
+        `/payments/${paymentId}/refund`,
+        payload,
+      );
+
+      console.log(
+        "📥 Moyasar refundPayment response:",
+        JSON.stringify(response.data, null, 2),
+      );
+      return response.data;
+    } catch (error) {
+      console.error(
+        "❌ Moyasar refundPayment error:",
+        error.response?.data || error.message,
+      );
+      throw new Error(
+        error.response?.data?.message || "Failed to process refund",
       );
     }
   }

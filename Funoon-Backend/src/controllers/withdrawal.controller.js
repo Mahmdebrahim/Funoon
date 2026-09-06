@@ -4,9 +4,11 @@ const Withdrawal = require("../models/Withdrawal");
 const BankAccount = require("../models/BankAccount");
 const Wallet = require("../models/Wallet");
 const Transaction = require("../models/Transaction");
-const { BadRequestError } = require("../utils/api-error");
+const { BadRequestError, ForbiddenError } = require("../utils/api-error");
 const ApiResponse = require("../utils/api-response");
 const catchAsync = require("../utils/catch-async");
+const eventEmitter = require("../events/event-emitter");
+const EVENTS = require("../events/events");
 
 // @desc    Request withdrawal
 // @route   POST /api/v1/withdrawals
@@ -15,53 +17,75 @@ const requestWithdrawal = catchAsync(async (req, res, next) => {
   const { amount } = req.body;
   const userId = req.user._id;
 
-  // 1. Check minimum amount
-  if (amount < 50) {
-    throw new BadRequestError("Minimum withdrawal amount is 50 SAR");
+  const MIN_AMOUNT = 50;
+  const MAX_AMOUNT = 20000;
+  const MAX_PER_WEEK = 2;
+
+  if (req.user.isBanned) {
+    throw new ForbiddenError("حسابك محظور — السحب غير متاح");
   }
 
-  // 2. Check weekly limit (once per 7 days)
-  const lastWithdrawal = await Withdrawal.findOne({ user: userId }).sort({
-    createdAt: -1,
+  const value = Number(amount);
+  if (!value || value <= 0) {
+    throw new BadRequestError("مبلغ غير صالح");
+  }
+
+  if (value < MIN_AMOUNT) {
+    throw new BadRequestError(`الحد الأدنى للسحب ${MIN_AMOUNT} ر.س`);
+  }
+  if (value > MAX_AMOUNT) {
+    throw new BadRequestError(
+      `الحد الأقصى للسحب في الطلب الواحد ${MAX_AMOUNT.toLocaleString()} ر.س`,
+    );
+  }
+
+  const activeWithdrawal = await Withdrawal.findOne({
+    user: userId,
+    status: { $in: ["PENDING", "APPROVED"] },
   });
-
-  if (lastWithdrawal) {
-    const daysSinceLast =
-      (Date.now() - lastWithdrawal.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSinceLast < 7) {
-      const daysToWait = Math.ceil(7 - daysSinceLast);
-      throw new BadRequestError(
-        `You can request withdrawal once per week. Please wait ${daysToWait} more day(s).`,
-      );
-    }
+  if (activeWithdrawal) {
+    throw new BadRequestError(
+      "لديك طلب سحب قيد المعالجة بالفعل — انتظر الانتهاء منه قبل طلب جديد.",
+    );
   }
 
-  // 3. Check wallet balance
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const weeklyCount = await Withdrawal.countDocuments({
+    user: userId,
+    createdAt: { $gte: weekAgo },
+    status: { $ne: "REJECTED" },
+  });
+  if (weeklyCount >= MAX_PER_WEEK) {
+    throw new BadRequestError(
+      `تم الوصول للحد الأقصى (${MAX_PER_WEEK}) من طلبات السحب خلال 7 أيام — حاول لاحقاً.`,
+    );
+  }
+
   const wallet = await Wallet.findOne({ user: userId });
-  if (!wallet || wallet.balance.available < amount) {
-    throw new BadRequestError("Insufficient available balance");
+  if (!wallet || wallet.balance.available < value) {
+    throw new BadRequestError("الرصيد المتاح غير كافٍ لهذا السحب");
   }
-
-  // 4. Check bank account exists
   const bankAccount = await BankAccount.findOne({ user: userId });
   if (!bankAccount) {
-    throw new BadRequestError("Please add your bank account details first");
+    throw new BadRequestError("يرجى إضافة بيانات حسابك البنكي أولاً");
+  }
+  if (!bankAccount.isVerified) {
+    throw new BadRequestError(
+      "حسابك البنكي قيد المراجعة. سيتم إخطارك عند التوثيق.",
+    );
   }
 
-  // 5. Process withdrawal in transaction
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // Debit from wallet
-    await wallet.debitAvailable(amount, session);
+    await wallet.debitAvailable(value, session);
 
-    // Create withdrawal request
     const withdrawal = await Withdrawal.create(
       [
         {
           user: userId,
-          amount,
+          amount: value,
           status: "PENDING",
           bankDetails: {
             iban: bankAccount.iban,
@@ -73,7 +97,6 @@ const requestWithdrawal = catchAsync(async (req, res, next) => {
       { session },
     );
 
-    // Create transaction record
     await Transaction.create(
       [
         {
@@ -81,7 +104,7 @@ const requestWithdrawal = catchAsync(async (req, res, next) => {
           withdrawal: withdrawal[0]._id,
           user: userId,
           type: "DEBIT_WITHDRAWAL",
-          amount,
+          amount: value,
           description: `Withdrawal request #${withdrawal[0]._id}`,
           balanceAfter: {
             available: wallet.balance.available,
@@ -96,12 +119,16 @@ const requestWithdrawal = catchAsync(async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // TODO: Send email to admin about new withdrawal request
+    eventEmitter.safeEmit(EVENTS.WITHDRAWAL_REQUESTED, {
+      userId,
+      userName: req.user.name,
+      amount: value,
+    });
 
     return ApiResponse.success(
       res,
       withdrawal[0],
-      "Withdrawal request submitted successfully",
+      "تم إرسال طلب السحب بنجاح — سيتم مراجعته خلال 3-5 أيام عمل",
     );
   } catch (error) {
     await session.abortTransaction();

@@ -1,5 +1,6 @@
 // src/services/shipping/oto.service.js
 const axios = require("axios");
+const logger = require("../../utils/logger")
 
 class OTOService {
   constructor() {
@@ -103,15 +104,57 @@ class OTOService {
     return `${day}/${month}/${year} ${hours}:${minutes}`;
   }
 
-  async checkOTODeliveryFee(params) {
+  // async checkOTODeliveryFee(params) {
+  //   try {
+  //     return await this._request(
+  //       "POST",
+  //       "/rest/v2/checkOTODeliveryFee",
+  //       params,
+  //     );
+  //   } catch (error) {
+  //     console.error("❌ OTO checkOTODeliveryFee error:", error);
+  //     throw error;
+  //   }
+  // }
+
+  async checkOTODeliveryFee({
+    originCity,
+    destinationCity,
+    weight,
+    length,
+    width,
+    height,
+    shippingType = "standard",
+  }) {
     try {
-      return await this._request(
+      const payload = {
+        originCity,
+        destinationCity,
+        weight: weight || 2,
+        length: length || 60,
+        width: width || 80,
+        height: height || 3,
+
+        // ✅ الفلترة الذكية من المصدر
+        deliveryType: "toCustomerDoorstep",
+        serviceType: shippingType === "giant" ? "heavyAndBulky" : "express",
+        includeEstimatedDates: true,
+        currency: "SAR",
+      };
+
+      // ✅ استخدم _request عشان يستفيد من الـ token management والـ error handling
+      const response = await this._request(
         "POST",
         "/rest/v2/checkOTODeliveryFee",
-        params,
+        payload,
       );
+
+      return response;
     } catch (error) {
-      console.error("❌ OTO checkOTODeliveryFee error:", error);
+      console.error(
+        "❌ OTO checkOTODeliveryFee error:",
+        error.message || error,
+      );
       throw error;
     }
   }
@@ -278,6 +321,31 @@ class OTOService {
   async getDeliveryFee(orderId) {
     return await this._request("POST", "/rest/v2/getDeliveryFee", { orderId });
   }
+
+  /**
+   * ✅ جلب تفاصيل العنوان من الـ Short Address Code
+   * @param {string} shortAddressCode - الرمز القصير (مثلاً: "RGUC8214")
+   */
+  async getAddressByShortCode(shortAddressCode) {
+    console.log(`📍 Looking up address: ${shortAddressCode}`);
+    const response = await this._request(
+      "POST",
+      "/rest/v2/getNationalAddressFromShortCode",
+      {
+        shortAddressCode,
+      },
+    );
+    console.log(
+      `✅ Address found: ${response?.data?.formattedFullAddress || "N/A"}`,
+    );
+    return response;
+  }
 }
 
 module.exports = new OTOService();
+
+
+
+
+
+

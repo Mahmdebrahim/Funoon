@@ -134,21 +134,26 @@ const orderSchema = new mongoose.Schema(
 
     // ── Shipping ──────────────────────────────────────
     shipping: {
-      // ✅ بيانات شركة الشحن المختارة من OTO (بتتحفظ وقت الـ checkout)
-      deliveryOptionId: { type: Number }, // ✅ ID شركة الشحن من OTO
-      deliveryCompanyName: { type: String }, // ✅ اسم الشركة (مثلاً: "aramex")
-      deliveryOptionName: { type: String }, // ✅ اسم الخيار (مثلاً: "Aramex")
-      estimatedDeliveryDate: { type: String }, // ✅ تاريخ التوصيل المتوقع (String من OTO)
-      pickupDropoff: { type: String }, // ✅ نوع الاستلام (freePickup / freePickupDropoff)
-      deliveryType: { type: String }, // ✅ نوع التوصيل (toCustomerDoorstep)
-      serviceType: { type: String }, // ✅ نوع الخدمة (express / heavyAndBulky)
-      logo: { type: String }, // ✅ لوجو الشركة
+      deliveryOptionId: { type: Number },
+      deliveryCompanyName: { type: String },
+      deliveryOptionName: { type: String },
 
-      // Addresses Snapshots
+      // ❌ شيل: estimatedDeliveryDate: { type: String },
+      // ✅ بدالها الاسم الصح المطابق لـ response بتاع OTO فعليًا
+      avgDeliveryTime: { type: String }, // "1to3WorkingDays"
+      pickupCutOffTime: { type: String }, // "11:00"
+      maxFreeWeight: { type: Number }, // 15
+      extraWeightPerKg: { type: Number }, // 2
+      returnFee: { type: Number }, // 22 - داخلي، مش للعرض للمشتري بالضرورة
+
+      pickupDropoff: { type: String },
+      deliveryType: { type: String },
+      serviceType: { type: String },
+      logo: { type: String },
+
       buyerAddress: { type: addressSnapshotSchema },
       artistAddress: { type: addressSnapshotSchema },
 
-      // Tracking Info (بتتملأ من OTO webhook أو createShipment)
       carrier: { type: String },
       trackingNumber: { type: String },
       trackingUrl: { type: String },
@@ -156,11 +161,52 @@ const orderSchema = new mongoose.Schema(
       otoListId: { type: String },
       otoShipmentId: { type: String },
 
-      // Timestamps
       shippedAt: { type: Date },
       deliveredAt: { type: Date },
       estimatedDelivery: { type: Date },
     },
+
+    // ═══ Fund Release & Holds ═══
+    onHold: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    holdReason: {
+      type: String,
+      trim: true,
+    },
+    fundsReleased: {
+      type: Boolean,
+      default: false,
+    },
+
+    // ── Cancellation ────────────────────────────────
+    cancellationReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Cancellation reason is too long"],
+    },
+    cancelledBy: {
+      type: String,
+      enum: ["buyer", "artist", "system", "admin"],
+    },
+    refundStatus: {
+      type: String,
+      enum: ["NONE", "PENDING", "COMPLETED", "FAILED"],
+      default: "NONE",
+    },
+    refundRequestedAt: {
+      type: Date,
+    },
+
+    adminOverrideBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    adminOverrideAt: { type: Date, default: null },
+    adminOverrideReason: { type: String, default: null },
 
     // ── Timestamps ────────────────────────────────────
     completedAt: { type: Date },

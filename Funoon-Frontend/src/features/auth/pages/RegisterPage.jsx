@@ -4,10 +4,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ROUTES } from '../../../config/routes'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/authStore'
 import api from '../../../services/api'
+import Button from "../../../components/Ui/Button";
 import { toast } from 'react-hot-toast'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import ar from 'react-phone-number-input/locale/ar'
@@ -49,7 +49,6 @@ const getPasswordStrength = (password) => {
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const { login } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false) // حالة منفصلة للتأكيد
   const [passwordValue, setPasswordValue] = useState('')
@@ -79,17 +78,13 @@ export default function RegisterPage() {
       })
 
       if (response?.success && response.data) {
-        const { user, accessToken } = response.data
-        login(user, accessToken)
-        toast.success('تم إنشاء الحساب وتسجيل الدخول بنجاح')
-
-        if (user.role === 'admin') {
-          navigate(ROUTES.ADMIN)
-        } else if (user.role === 'artist') {
-          navigate(ROUTES.ARTIST_DASHBOARD)
-        } else {
-          navigate(ROUTES.HOME)
-        }
+        const { userId, email } = response.data
+        // احفظ مؤقتاً عشان صفحة التأكيد تقدر تقرأهم
+        localStorage.setItem('_funoon_pending_userId', userId)
+        localStorage.setItem('_funoon_pending_email', email)
+        toast.success('تم إنشاء الحساب — يرجى تأكيد بريدك الإلكتروني')
+        localStorage.setItem('otpSentAt', String(Date.now()));
+        navigate(`${ROUTES.VERIFY_EMAIL}?userId=${userId}&email=${encodeURIComponent(email)}`)
       }
     } catch (err) {
       console.error('Registration error details:', err)
@@ -216,14 +211,15 @@ export default function RegisterPage() {
           </div>
           {errors.termsAccepted && <p className="text-xs text-error mt-1.5 font-body">{errors.termsAccepted.message}</p>}
         </div>
-
-        <button type="submit" disabled={loading} className="w-full py-4 bg-primary text-white font-body text-sm font-semibold tracking-wider hover:bg-primary/90 border-b-2 border-transparent hover:border-secondary transition-premium select-none flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-none mt-2">
-          {loading ? (
-            <><Loader2 className="w-4 h-4 animate-spin text-white" /><span>جاري إنشاء الحساب...</span></>
-          ) : (
-            <span>إنشاء الحساب</span>
-          )}
-        </button>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          isLoading={loading}
+        >
+          {loading ? "جارى إنشاء الحساب ..." : "إنشاء الحساب"}
+        </Button>
       </form>
 
       <p className="text-center text-sm text-on-surface-variant font-body">

@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 import api from '../../../services/api'
 import { toast } from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
-
+import Button from "../../../components/Ui/Button";
 const loginSchema = z.object({
   email: z.string().trim().email('البريد الإلكتروني غير صحيح'),
   password: z.string().min(1, 'كلمة المرور مطلوبة')
@@ -31,8 +31,6 @@ export default function LoginPage() {
         password: data.password
       })
 
-      // response = response.data from success handler
-      // So: { success: true, data: { user, accessToken }, message }
       if (response?.success && response.data) {
         const { user, accessToken } = response.data
         login(user, accessToken)
@@ -47,11 +45,48 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      console.error('Login error details:', err)
-      const errorMsg = err.message || err.data?.message || 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-      toast.error(errorMsg)
+      // ✅ axios interceptor بيعمل reshape — err هنا هو الـ body مباشرة
+      const status = err?.status;  // axios بيضيف status في الـ body
+      const body = err || {};  // err نفسه هو الـ body
+
+      console.log("🔍 Login error:", { err, status, body });
+
+      // ✅ حالة 429: Rate Limit
+      if (status === 429) {
+        const msg = typeof body?.message === 'string'
+          ? body.message
+          : 'تم تجاوز عدد المحاولات — حاول بعد 15 دقيقة';
+        toast.error(msg);
+        return;
+      }
+
+      // ✅ استخراج needsVerification — من err.data مباشرة
+      let needsData = null;
+
+      if (body?.data?.needsVerification) {
+        needsData = body.data;
+      } else if (body?.needsVerification) {
+        needsData = body;
+      }
+
+      if (needsData?.userId) {
+        localStorage.setItem('_funoon_pending_userId', needsData.userId);
+        localStorage.setItem('_funoon_pending_email', needsData.email || '');
+        localStorage.setItem('otpSentAt', String(Date.now()));
+        toast('يرجى تأكيد بريدك الإلكتروني — تم إرسال رمز جديد', { icon: '📧' });
+        navigate(`${ROUTES.VERIFY_EMAIL}?userId=${needsData.userId}&email=${encodeURIComponent(needsData.email || '')}`);
+        return;
+      }
+
+      // ✅ رسائل الأخطاء العادية
+      let msg = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+      if (typeof body?.message === 'string') msg = body.message;
+      else if (status === 500) msg = 'حدث خطأ في الخادم';
+      else if (status === 429) msg = 'تم تجاوز عدد المحاولات';
+
+      toast.error(msg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -72,8 +107,8 @@ export default function LoginPage() {
           <label className="block text-xs uppercase tracking-wider font-sans font-semibold text-primary">
             البريد الإلكتروني
           </label>
-          <input 
-            type="email" 
+          <input
+            type="email"
             {...register('email')}
             className="w-full py-3 bg-transparent border-b border-outline/30 focus:border-primary focus:outline-none transition-premium text-base placeholder-on-surface-variant/40 font-body rounded-none"
             placeholder="yourname@example.com"
@@ -89,8 +124,8 @@ export default function LoginPage() {
           <label className="block text-xs uppercase tracking-wider font-sans font-semibold text-primary">
             كلمة المرور
           </label>
-          <input 
-            type="password" 
+          <input
+            type="password"
             {...register('password')}
             className="w-full py-3 bg-transparent border-b border-outline/30 focus:border-primary focus:outline-none transition-premium text-base placeholder-on-surface-variant/40 font-body rounded-none"
             placeholder="••••••••"
@@ -104,15 +139,15 @@ export default function LoginPage() {
         {/* Remember me & Forgot Password */}
         <div className="flex items-center justify-between text-xs pt-1">
           <label className="flex items-center gap-2 cursor-pointer select-none font-body">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               className="accent-primary w-4.5 h-4.5 border-outline/30 rounded-none focus:ring-0 focus:ring-offset-0 cursor-pointer"
             />
             <span className="text-on-surface-variant">تذكرني في هذا المتصفح</span>
           </label>
-          
-          <Link 
-            to={ROUTES.FORGOT_PASSWORD} 
+
+          <Link
+            to={ROUTES.FORGOT_PASSWORD}
             className="text-secondary hover:text-primary transition-premium font-semibold font-body"
           >
             نسيت كلمة المرور؟
@@ -120,20 +155,15 @@ export default function LoginPage() {
         </div>
 
         {/* Submit CTA */}
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full py-4 bg-primary text-white font-body text-sm font-semibold tracking-wider hover:bg-primary/90 border-b-2 border-transparent hover:border-secondary transition-premium select-none flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed rounded-none"
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          isLoading={loading}
         >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin text-white" />
-              <span>جاري التحقق...</span>
-            </>
-          ) : (
-            <span>تسجيل الدخول</span>
-          )}
-        </button>
+          {loading ? "جاري التحقق..." : "تسجيل الدخول"}
+        </Button>
       </form>
 
       {/* Alternative flow */}

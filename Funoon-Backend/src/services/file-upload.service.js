@@ -89,13 +89,48 @@ class FileUploadService {
     }
   }
 
+  // Upload Cover Image (Artist Profile Banner)
+  static async uploadCoverImage(file, userId) {
+    try {
+      if (!file) throw new BadRequestError("No file provided");
+      if (!file.mimetype.startsWith("image/"))
+        throw new BadRequestError("File must be an image");
+
+      const uploadDir = path.join(__dirname, "../../uploads/covers");
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 8);
+      const filename = `cover-${userId}-${timestamp}-${randomString}.webp`;
+      const filepath = path.join(uploadDir, filename);
+
+      // صورة الغلاف: 1600×600 (landscape) مع crop للـ center
+      await sharp(file.buffer)
+        .resize(1600, 600, { fit: "cover", position: "center" })
+        .webp({ quality: 85 })
+        .toFile(filepath);
+
+      const coverUrl = `/uploads/covers/${filename}`;
+      logger.info(`Cover image uploaded: ${coverUrl}`);
+      return coverUrl;
+    } catch (error) {
+      logger.error("Error uploading cover image:", error);
+      if (error instanceof BadRequestError) throw error;
+      throw new InternalServerError("Failed to upload cover image");
+    }
+  }
+
   // Delete single file
   static async deleteFile(fileUrl) {
     try {
       if (!fileUrl) return;
 
       const filename = fileUrl.split("/").pop();
-      const folder = fileUrl.includes("avatars") ? "avatars" : "artworks";
+     const folder = fileUrl.includes("avatars")
+       ? "avatars"
+       : fileUrl.includes("covers")
+         ? "covers"
+         : "artworks";
       const filepath = path.join(
         __dirname,
         `../../uploads/${folder}/${filename}`,
@@ -109,6 +144,36 @@ class FileUploadService {
         return;
       }
       logger.error("Error deleting file:", error);
+    }
+  }
+
+  // Delete single artwork image by key
+  static async deleteImageByKey(key) {
+    try {
+      if (!key) return;
+
+      const uploadDir = path.join(__dirname, "../../uploads/artworks");
+      const files = await fs.readdir(uploadDir);
+
+      // الـ key = artwork-{artworkId}-{timestamp}-{index}
+      // الـ filename = {key}-{randomString}.webp
+      // ⚠️ مهم: نـ match بـ `${key}-` (مش `key` بس) عشان نتجنب
+      //    إن artwork-...-1 يـ match مع artwork-...-10 بالغلط
+      const targetFile = files.find((file) => file.startsWith(`${key}-`));
+
+      if (!targetFile) {
+        logger.warn(`Image not found for key: ${key}`);
+        return;
+      }
+
+      await fs.unlink(path.join(uploadDir, targetFile));
+      logger.info(`🗑️ Image deleted by key: ${key} (${targetFile})`);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        logger.warn(`Artworks directory not found`);
+        return;
+      }
+      logger.error(`Error deleting image by key ${key}:`, error);
     }
   }
 

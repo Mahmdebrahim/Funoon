@@ -1,3 +1,5 @@
+
+
 // src/controllers/subscription.controller.js
 const mongoose = require("mongoose");
 const User = require("../models/User");
@@ -13,78 +15,127 @@ const logger = require("../utils/logger");
 // @desc    Purchase a subscription plan
 // @route   POST /api/v1/subscriptions/purchase
 // @access  Private
+// @desc    Purchase a subscription plan
+// @route   POST /api/v1/subscriptions/purchase
+// @access  Private
 const purchaseSubscription = catchAsync(async (req, res, next) => {
   const { planId } = req.body;
   const userId = req.user._id;
 
-  // 1. Validate Plan
   const plan = PLAN_CONFIG[planId];
-  if (!plan) {
-    throw new BadRequestError("Invalid subscription plan");
-  }
+  if (!plan) throw new BadRequestError("Invalid subscription plan");
 
-  // 2. Check if already active (same plan, not expiring soon)
+  // 1. Check active subscription
   const user = await User.findById(userId);
   if (user.subscription?.isActive && user.subscription.plan === planId) {
-    const endDate = new Date(user.subscription.endDate);
-    const now = new Date();
-    const daysLeft = (endDate - now) / (1000 * 60 * 60 * 24);
-
+    const daysLeft =
+      (new Date(user.subscription.endDate) - new Date()) / 86400000;
     if (daysLeft > 30) {
       throw new BadRequestError(
-        `You already have an active ${plan.label} subscription. ${Math.ceil(daysLeft)} days remaining.`,
+        `Already subscribed. ${Math.ceil(daysLeft)} days remaining.`,
       );
     }
   }
 
-  // 3. Check for pending payment (idempotency)
-  const pendingPayment = await SubscriptionPayment.findOne({
+  // 2. Cleanup: expired payments (أكتر من 10 دقايق)
+  await SubscriptionPayment.updateMany(
+    {
+      user: userId,
+      plan: planId,
+      status: "PENDING",
+      createdAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) },
+    },
+    { $set: { status: "EXPIRED" } },
+  );
+
+  // 3. لو فيه pending صالح بـ invoiceId → رجعه
+  const existing = await SubscriptionPayment.findOne({
     user: userId,
     plan: planId,
     status: "PENDING",
-    expiresAt: { $gt: new Date() },
+    moyasarPaymentId: { $ne: null, $exists: true },
+    createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
   });
 
-  if (pendingPayment) {
+  if (existing) {
+    logger.info(`♻️ Reusing existing payment: ${existing._id}`);
     return ApiResponse.success(
       res,
       {
-        paymentUrl: `${process.env.MOYASAR_CHECKOUT_URL || "https://checkout.moyasar.com"}/invoices/${pendingPayment.moyasarPaymentId}`,
-        invoiceId: pendingPayment.moyasarPaymentId,
+        paymentUrl: `${process.env.MOYASAR_CHECKOUT_URL || "https://checkout.moyasar.com"}/invoices/${existing.moyasarPaymentId}`,
+        invoiceId: existing.moyasarPaymentId,
         planDetails: plan,
         existingPayment: true,
       },
-      "Existing payment found. Please complete it.",
+      "Existing payment found",
     );
   }
 
-  // 4. Create SubscriptionPayment record (Pending)
+  // 4. لو فيه pending من غير invoiceId (request تاني لسه شغال) → استنى 3 ثواني
+  const inFlight = await SubscriptionPayment.findOne({
+    user: userId,
+    plan: planId,
+    status: "PENDING",
+    $or: [{ moyasarPaymentId: null }, { moyasarPaymentId: { $exists: false } }],
+    createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
+  });
+
+  if (inFlight) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const refreshed = await SubscriptionPayment.findById(inFlight._id);
+    if (refreshed?.moyasarPaymentId) {
+      logger.info(`♻️ Reusing payment after wait: ${refreshed._id}`);
+      return ApiResponse.success(
+        res,
+        {
+          paymentUrl: `${process.env.MOYASAR_CHECKOUT_URL || "https://checkout.moyasar.com"}/invoices/${refreshed.moyasarPaymentId}`,
+          invoiceId: refreshed.moyasarPaymentId,
+          planDetails: plan,
+          existingPayment: true,
+        },
+        "Existing payment found",
+      );
+    }
+    // الأول فشل → كمّل عادي
+    refreshed.status = "EXPIRED";
+    await refreshed.save();
+  }
+
+  // 5. اعمل subPayment جديد
   const subPayment = await SubscriptionPayment.create({
     user: userId,
     plan: planId,
     amount: plan.price,
     amountInHalalas: plan.price * 100,
     status: "PENDING",
+    expiresAt: new Date(Date.now() + 30 * 60 * 1000),
   });
 
-  // 5. Create Moyasar Invoice
-  const invoiceData = {
-    amount: plan.price * 100, // بالهللات
-    description: `Funoon.sa - ${plan.label} Subscription (${plan.durationMonths} Months)`,
-    callbackUrl: `${process.env.NGROK_URL}/api/v1/webhooks/moyasar`,
-    successUrl: `${process.env.FRONTEND_URL}/subscription/success`,
-    backUrl: `${process.env.FRONTEND_URL}/subscription/cancel`,
-    metadata: {
-      type: "subscription", // ✅ مهم للـ Webhook
-      subscriptionPaymentId: subPayment._id.toString(),
-      userId: userId.toString(),
-      planId: planId,
-    },
-  };
+  // 6. Moyasar invoice (الـ Idempotency-Key بيحمي من الـ duplicates)
+  let invoice;
+  try {
+    invoice = await MoyasarService.createInvoice({
+      amount: plan.price * 100,
+      description: `Funoon.sa - ${plan.label} Subscription`,
+      callbackUrl: `${process.env.NGROK_URL}/api/v1/webhooks/moyasar`,
+      successUrl: `${process.env.FRONTEND_URL}/subscription/success`,
+      backUrl: `${process.env.FRONTEND_URL}/subscription/cancel`,
+      metadata: {
+        type: "subscription",
+        subscriptionPaymentId: subPayment._id.toString(),
+        userId: userId.toString(),
+        planId,
+      },
+    });
+    if (!invoice?.id) throw new Error("Invalid invoice");
+  } catch (error) {
+    logger.error("❌ Moyasar invoice failed:", error.message);
+    subPayment.status = "FAILED";
+    subPayment.failureReason = error.message;
+    await subPayment.save();
+    throw new BadRequestError("تعذّر بدء عملية الدفع. حاول مرة أخرى.");
+  }
 
-  const invoice = await MoyasarService.createInvoice(invoiceData);
-
-  // 6. Save Invoice ID
   subPayment.moyasarPaymentId = invoice.id;
   await subPayment.save();
 
@@ -95,7 +146,7 @@ const purchaseSubscription = catchAsync(async (req, res, next) => {
       invoiceId: invoice.id,
       planDetails: plan,
     },
-    "Subscription invoice created. Please complete payment.",
+    "Subscription invoice created",
   );
 });
 
@@ -156,20 +207,27 @@ const getMySubscriptionPayments = catchAsync(async (req, res, next) => {
   );
 });
 
+
 // @desc    Handle Moyasar webhook for subscription payments
 // @route   POST /api/v1/webhooks/moyasar/subscription
 // @access  Public (Moyasar server)
 const handleSubscriptionWebhook = catchAsync(async (req, res, next) => {
-  const rawBody = req.body;
-
   let event;
-  try {
-    const bodyString =
-      typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-    event = JSON.parse(bodyString);
-  } catch (err) {
-    logger.error("❌ Subscription webhook parse error:", err.message);
-    return res.status(400).json({ error: "Invalid JSON" });
+  if (
+    typeof req.body === "object" &&
+    req.body !== null &&
+    !Buffer.isBuffer(req.body)
+  ) {
+    event = req.body; // Already parsed ✅
+  } else {
+    try {
+      const bodyString =
+        typeof req.body === "string" ? req.body : req.body.toString("utf8");
+      event = JSON.parse(bodyString);
+    } catch (err) {
+      logger.error("❌ Subscription webhook parse error:", err.message);
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
   }
 
   logger.info("📥 Subscription webhook received, status:", event.status);
@@ -234,7 +292,7 @@ const handleSubscriptionWebhook = catchAsync(async (req, res, next) => {
     endDate.setMonth(endDate.getMonth() + plan.durationMonths);
 
     // 4. Update User (Role & Subscription)
-    user.role = "artist"; // ✅ ترقية تلقائية
+    user.role = "artist"; 
     user.subscription = {
       plan: planId,
       startDate: now,

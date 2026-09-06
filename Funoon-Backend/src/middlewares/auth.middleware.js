@@ -5,7 +5,6 @@ const catchAsync = require("../utils/catch-async");
 
 const optionalAuth = catchAsync(async (req, res, next) => {
   let token;
-
   if (req.headers.authorization?.startsWith("Bearer")) {
     token = req.headers.authorization.split(" ")[1];
   }
@@ -17,11 +16,11 @@ const optionalAuth = catchAsync(async (req, res, next) => {
         "+isActive",
       );
 
-      if (currentUser && currentUser.isActive) {
+      if (currentUser && currentUser.isActive && !currentUser.isBanned) {
         req.user = currentUser;
       }
     } catch (err) {
-      // Token invalid - نتجاهل ونكمل (مش هنرمي error)
+      // تجاهل
     }
   }
 
@@ -54,18 +53,25 @@ const protect = catchAsync(async (req, res, next) => {
 
   // Check if user still exists
   const currentUser = await User.findById(decoded.userId).select("+isActive");
+
   if (!currentUser) {
+    // ✅ الأول: user موجود؟
     throw new UnauthorizedError(
       "The user belonging to this token no longer exists.",
     );
   }
 
-  // Check if user is active
+  if (currentUser.isBanned) {
+    // ✅ بعدين: محظور؟
+    throw new UnauthorizedError(
+      "حسابك محظور من المنصة. يرجى التواصل مع الدعم إذا كنت تعتقد أن هذا خطأ.",
+    );
+  }
+
   if (!currentUser.isActive) {
     throw new UnauthorizedError("This account has been deactivated.");
   }
 
-  // Check if user changed password after the token was issued
   if (currentUser.passwordChangedAt) {
     const changedTimestamp = parseInt(
       currentUser.passwordChangedAt.getTime() / 1000,
@@ -78,7 +84,11 @@ const protect = catchAsync(async (req, res, next) => {
     }
   }
 
-  // Grant access
+  // ✅ تحقق من تأكيد البريد — المستخدمون القدامى (emailVerified: true) يكملون عادي
+  if (!currentUser.emailVerified) {
+    throw new UnauthorizedError("يرجى تأكيد بريدك الإلكتروني أولاً");
+  }
+
   req.user = currentUser;
   next();
 });

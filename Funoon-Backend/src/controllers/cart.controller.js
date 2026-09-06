@@ -2,7 +2,11 @@
 const Cart = require("../models/Cart");
 const Artwork = require("../models/Artwork");
 const User = require("../models/User");
-const { BadRequestError, NotFoundError } = require("../utils/api-error");
+const {
+  BadRequestError,
+  NotFoundError,
+  ForbiddenError,
+} = require("../utils/api-error");
 const ApiResponse = require("../utils/api-response");
 const catchAsync = require("../utils/catch-async");
 const messages = require("../utils/messages.ar");
@@ -12,7 +16,7 @@ const messages = require("../utils/messages.ar");
  * الشحن الحقيقي بيتحسب في الـ checkout من OTO
  */
 const calculateShippingCost = (artwork, artistPlan) => {
-  return 0; // ✅ الشحن بيتحسب في checkout
+  return 0;
 };
 
 // @desc    Get current user's cart with summary
@@ -31,6 +35,9 @@ const getCart = catchAsync(async (req, res, next) => {
     { path: "items.artist", select: "name email subscription" },
   ]);
 
+  cart.items = cart.items.filter((item) => !item.artist?.isBanned);
+  await cart.save();
+
   let subtotal = 0;
 
   const responseItems = cart.items.map((item) => {
@@ -45,15 +52,15 @@ const getCart = catchAsync(async (req, res, next) => {
         price: currentPrice,
         dimensions: item.artwork.dimensions,
         shippingType: item.artwork.shippingType,
-        weight: item.artwork.weight, // ✅ أضف
+        weight: item.artwork.weight, 
       },
       artist: {
         _id: item.artist._id,
         name: item.artist.name,
-        city: item.artist.address?.city, // ✅ أضف
+        city: item.artist.address?.city,
       },
       priceSnapshot: currentPrice,
-      shippingCost: 0, // ✅ الشحن بيتحسب في checkout
+      shippingCost: 0, 
       shippingType: item.artwork.shippingType,
     };
   });
@@ -77,6 +84,9 @@ const getCart = catchAsync(async (req, res, next) => {
 // @access  Private
 const addToCart = catchAsync(async (req, res, next) => {
   const { artworkId } = req.body;
+  if (req.user.isBanned) {
+    throw new ForbiddenError("حسابك محظور");
+  }
   if (!artworkId) {
     throw new BadRequestError("Artwork ID is required");
   }
@@ -115,7 +125,7 @@ const addToCart = catchAsync(async (req, res, next) => {
     artwork: artwork._id,
     artist: artist._id,
     priceSnapshot: artwork.price,
-    shippingCost: 0, // ✅ الشحن بيتحسب في checkout
+    shippingCost: 0, 
     shippingType: artwork.shippingType,
   });
 
@@ -162,3 +172,5 @@ module.exports = {
   clearCart,
   calculateShippingCost,
 };
+
+

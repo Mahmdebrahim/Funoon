@@ -1,0 +1,20 @@
+[0716/052426.687:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052427.069:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052538.189:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052540.828:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052543.774:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052544.612:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052545.297:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052545.427:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:867] not connected
+[0716/052545.496:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/052545.540:ERROR:electron\shell\common\node_util.cc:148] Failed to initialize Node.js. {
+   "args": [ "C:\\Program Files\\cursor\\Cursor.exe", "c:\\Users\\lenovo\\.cursor\\extensions\\bradlc.vscode-tailwindcss-0.14.28-universal\\dist\\tailwindServer.js", "--node-ipc", "--clientProcessId=24400" ],
+   "location": ", at node:internal/buffer:1104",
+   "message": "Uncaught RangeError: Failed to allocate memory",
+   "source_line": "  return new FastBuffer(createUnsafeArrayBuffer(size));"
+}
+
+[0716/055857.068:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/055900.720:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/055901.597:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)
+[0716/055902.479:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: The system cannot find the file specified. (0x2)

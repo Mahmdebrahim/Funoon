@@ -1,3 +1,6 @@
+
+
+
 // src/models/SubscriptionPayment.js
 const mongoose = require("mongoose");
 
@@ -41,7 +44,7 @@ const subscriptionPaymentSchema = new mongoose.Schema(
       type: Date,
       default: () => {
         const date = new Date();
-        date.setHours(date.getHours() + 24); // invoice صالح 24 ساعة
+        date.setHours(date.getHours() + 24); 
         return date;
       },
     },
@@ -57,6 +60,14 @@ const subscriptionPaymentSchema = new mongoose.Schema(
 // Indexes
 subscriptionPaymentSchema.index({ user: 1, createdAt: -1 });
 subscriptionPaymentSchema.index({ status: 1 });
+// subscriptionPaymentSchema.index(
+//   { user: 1, plan: 1, status: 1 },
+//   {
+//     unique: true,
+//     partialFilterExpression: { status: "PENDING" },
+//     name: "unique_pending_per_user_plan",
+//   },
+// );
 
 module.exports = mongoose.model(
   "SubscriptionPayment",

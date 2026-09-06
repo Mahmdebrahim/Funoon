@@ -47,47 +47,87 @@ const subscriptionSchema = new mongoose.Schema(
 
 // ─── Plan Config (Single Source of Truth) ───────────────────────────────────
 
+// ─── Plan Config (Single Source of Truth) ───────────────────────────────────
+
 const PLAN_CONFIG = {
   opal_classic: {
     id: "opal_classic",
     label: "Opal Classic",
+    labelAr: "أوبال كلاسيك",
     price: 299,
     durationMonths: 12,
     commission: 0.15,
+
+    // حدود
     maxArtworks: 5,
+    maxArtworkSize: 120, // cm — أكبر بُعد مسموح
+
+    // ظهور + شحن
+    searchPriority: 2,
     coversStandardShipping: false,
+    freeShippingQuota: 0, // شحنات مجانية/سنة
+
+    // ميزات (booleans — بتشتغل مع hasFeature)
     features: {
-      canSeeDetailedViews: false,
+      verifiedBadge: false,
+      coverImage: false,
+      socialLinks: false,
+      featuredArtworks: false,
+      analytics: false,
       prioritySupport: false,
-      customProfile: false,
+      canSeeDetailedViews: false,
     },
   },
+
   opal_plus: {
     id: "opal_plus",
     label: "Opal Plus",
+    labelAr: "أوبال بلس",
     price: 399,
     durationMonths: 12,
     commission: 0.15,
+
     maxArtworks: 15,
+    maxArtworkSize: 120,
+
+    searchPriority: 3,
     coversStandardShipping: false,
+    freeShippingQuota: 0,
+
     features: {
-      canSeeDetailedViews: true,
+      verifiedBadge: false,
+      coverImage: true,
+      socialLinks: true,
+      featuredArtworks: false,
+      analytics: true,
       prioritySupport: true,
-      customProfile: true,
+      canSeeDetailedViews: true,
     },
   },
+
   opal_prestige: {
     id: "opal_prestige",
     label: "Opal Prestige",
+    labelAr: "أوبال برستيج",
     price: 599,
     durationMonths: 12,
     commission: 0.1,
+
     maxArtworks: Infinity,
+    maxArtworkSize: 200,
+
+    searchPriority: 4,
     coversStandardShipping: true,
+    freeShippingQuota: 10,
+
     features: {
-      canSeeDetailedViews: true,
+      verifiedBadge: true,
+      coverImage: true,
+      socialLinks: true,
+      featuredArtworks: true,
+      analytics: true,
       prioritySupport: true,
-      customProfile: true,
+      canSeeDetailedViews: true,
     },
   },
 };
@@ -124,6 +164,8 @@ const userSchema = new mongoose.Schema(
     },
     avatar: { type: String, default: null },
     profileViewsCount: { type: Number, default: 0 },
+    avgRating: { type: Number, default: 0, min: 0, max: 5 },
+    reviewsCount: { type: Number, default: 0 },
 
     // Address (required for shipping)
     address: { type: addressSchema, default: () => ({}) },
@@ -137,6 +179,15 @@ const userSchema = new mongoose.Schema(
 
     // Artist-only fields
     bio: { type: String, maxlength: 500 },
+    // Custom Profile (Plus + Prestige)
+    coverImage: { type: String, default: null },
+    socialLinks: {
+      instagram: { type: String, trim: true },
+      facebook: { type: String, trim: true },
+      twitter: { type: String, trim: true },
+      website: { type: String, trim: true },
+    },
+
     subscription: { type: subscriptionSchema, default: () => ({}) },
     freelanceVerification: {
       certificateNumber: { type: String, trim: true },
@@ -148,12 +199,28 @@ const userSchema = new mongoose.Schema(
     termsAccepted: { type: Boolean, required: true, default: false },
     termsAcceptedAt: { type: Date },
 
+    // ═══ Email Verification ═══
+    emailVerified: { type: Boolean, default: false, index: true },
+    emailVerificationOTP: { type: String, default: null, select: false },
+    emailVerificationOTPExpires: { type: Date, default: null, select: false },
+    otpAttempts: { type: Number, default: 0, select: false },
+    otpLockedUntil: { type: Date, default: null, select: false },
+    otpLastSentAt: { type: Date, default: null, select: false },
+    otpDailyCount: { type: Number, default: 0 },
+    otpDailyCountResetAt: { type: Date, default: Date.now },
+
     // Security
     passwordChangedAt: { type: Date },
     passwordResetToken: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },
     isActive: { type: Boolean, default: true, select: false },
     deletedAt: { type: Date, select: false },
+
+    // ═══ Ban Info ═══
+    isBanned: { type: Boolean, default: false },
+    bannedAt: { type: Date },
+    bannedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    banReason: { type: String },
   },
   {
     timestamps: true,
@@ -221,7 +288,18 @@ userSchema.methods.getCommissionRate = function () {
 // Check if platform covers shipping
 userSchema.methods.isShippingCovered = function () {
   const config = this.getPlanConfig();
-  return config ? config.shippingCoverd : false;
+  return config ? config.coversStandardShipping : false;
+};
+
+// Get max artwork size (cm) for current plan
+userSchema.methods.getMaxArtworkSize = function () {
+  const config = this.getPlanConfig();
+  return config ? config.maxArtworkSize : 120;
+};
+
+// Check if artist has verified badge
+userSchema.methods.isVerifiedArtist = function () {
+  return this.hasFeature("verifiedBadge");
 };
 
 // ─── Statics ─────────────────────────────────────────────────────────────────

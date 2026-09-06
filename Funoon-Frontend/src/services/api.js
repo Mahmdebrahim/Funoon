@@ -1,4 +1,4 @@
-// api.js
+// src/services/api.js
 import axios from "axios";
 import { useAuthStore } from "../features/auth/stores/authStore";
 
@@ -33,16 +33,34 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+// ✅ قائمة الـ endpoints اللي مش هنعملها refresh
+const AUTH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh-token",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify-email",
+  "/auth/resend-otp",
+  "/auth/verify-status",
+];
+
+const isAuthEndpoint = (url) => {
+  return AUTH_ENDPOINTS.some((endpoint) => url?.includes(endpoint));
+};
+
 api.interceptors.response.use(
   (response) => response.data,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (originalRequest.url?.includes("/auth/refresh-token")) {
-        return Promise.reject(error.response?.data || error);
-      }
+    // ✅ لو الـ error من auth endpoint، ارجع الـ error مباشرة بدون refresh
+    if (isAuthEndpoint(originalRequest?.url)) {
+      return Promise.reject(error.response?.data || error);
+    }
 
+    // ✅ بس اعمل refresh للـ 401 من الـ endpoints التانية
+    if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -57,8 +75,6 @@ api.interceptors.response.use(
 
       try {
         const refreshResponse = await api.post("/auth/refresh-token");
-        // The response interceptor already unwraps response.data
-        // So refreshResponse = { success: true, data: { accessToken }, message }
         const accessToken = refreshResponse?.data?.accessToken;
 
         if (!accessToken) {
@@ -81,6 +97,8 @@ api.interceptors.response.use(
           "/checkout",
           "/wallet",
           "/subscription",
+          "/orders",
+          "/artist",
         ];
         const currentPath = window.location.pathname;
         const isProtected = protectedPaths.some((path) =>

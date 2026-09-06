@@ -28,6 +28,17 @@ walletSchema.methods.creditPending = async function (amount, session) {
   return await this.save({ session });
 };
 
+// خصم من الـ pending (عكس creditPending) — عند الـ refund
+// خصم من الـ pending (عكس creditPending) — عند الـ refund
+walletSchema.methods.debitPending = async function (amount, session) {
+  if (this.balance.pending < amount) {
+    throw new Error("Insufficient pending balance for refund");
+  }
+  this.balance.pending -= amount;
+  this.totalEarned = Math.max(0, this.totalEarned - amount); // ✅ عكس creditPending
+  return session ? this.save({ session }) : this.save();
+};
+
 // Release pending to available when delivery is confirmed
 walletSchema.methods.releaseToAvailable = async function (amount, session) {
   if (this.balance.pending < amount) {
@@ -49,5 +60,6 @@ walletSchema.methods.debitAvailable = async function (amount, session) {
 };
 
 module.exports = mongoose.model("Wallet", walletSchema);
+
 
 
