@@ -31,7 +31,11 @@ app.use(
   }),
 );
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+const allowedOrigins = (
+  process.env.CORS_ORIGINS ||
+  "https://funoon-beta.vercel.app/" ||
+  "http://localhost:5173/"
+)
   .split(",")
   .map((s) => s.trim());
 
