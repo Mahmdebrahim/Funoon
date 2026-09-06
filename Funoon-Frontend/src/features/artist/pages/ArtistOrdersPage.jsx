@@ -11,7 +11,7 @@ import {
     Loader2,
 } from "lucide-react";
 import { dashboardService } from "../services/dashboard.service";
-import Button from "../../../components/ui/Button";
+import Button from "../../../components/Ui/Button";
 import { getMediaUrl } from "../../../utils/media";
 
 // ═══════════════════════════════════════════════════
